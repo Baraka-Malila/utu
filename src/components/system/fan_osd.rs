@@ -23,6 +23,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use rust_i18n::t;
 
+use crate::services::commands::is_cosmic_desktop;
 use crate::services::dbus::FanProfile;
 
 struct OsdState {
@@ -115,9 +116,13 @@ pub fn show(profile: FanProfile, enabled: bool) {
             move || {
                 OSD.with(|cell| {
                     if let Some(s) = cell.borrow_mut().as_mut() {
-                        // Keep the layer-shell surface mapped to avoid a
-                        // wl_surface.leave-after-destroy race on COSMIC.
-                        s.window.set_opacity(0.0);
+                        if is_cosmic_desktop() {
+                            // Keep the layer-shell surface mapped to avoid a
+                            // wl_surface.leave-after-destroy race on COSMIC.
+                            s.window.set_opacity(0.0);
+                        } else {
+                            s.window.set_visible(false);
+                        }
                         s.timeout = None;
                     }
                 });
