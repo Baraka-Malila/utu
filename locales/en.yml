@@ -155,7 +155,7 @@ fn_key_save_error: "Error while saving: %{error}"
 fn_key_grubby_missing_warning: "The 'grubby' tool is not installed. Automatic modification of kernel parameters is currently only supported on Fedora/RHEL distributions."
 
 # asus_key_hint
-asus_key_hint_group_title: "Launch via ASUS Key"
+asus_key_hint_group_title: "Shortcut"
 asus_key_hint_row_title: "Launch via ASUS Key"
 asus_key_hint_row_subtitle: "For security and architecture reasons, Ayuz does not listen to background keypresses. To open the app with your dedicated ASUS key, simply use the global shortcut settings of your Desktop Environment or Window Manager (e.g., KDE Custom Shortcuts, GNOME Settings, or your sxhkd/i3 config) and bind the key to launch 'ayuz'."
 
@@ -391,5 +391,5 @@ fan_hotkey_enable_title: "FN + F shortcut"
 fan_hotkey_enable_subtitle: "Cycle fan profiles (Balanced → Performance → Whisper) when the fan key is pressed."
 fan_osd_enabled_title: "Show fan profile overlay"
 fan_osd_enabled_subtitle: "Display a brief on-screen indicator whenever the fan profile changes."
-fan_hotkey_listening: "FN+F fan-key listener active on \"%{device}\""
+fan_hotkey_listening: 'FN+F fan-key listener active on "%{device}"'
 error_fan_hotkey_no_device: "No ASUS hotkey input device found; FN+F fan-mode shortcut disabled."

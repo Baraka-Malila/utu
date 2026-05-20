@@ -155,7 +155,7 @@ fn_key_save_error: "Erro ao salvar: %{error}"
 fn_key_grubby_missing_warning: "A ferramenta 'grubby' não está instalada. A modificação automática de parâmetros do kernel é atualmente suportada apenas em distribuições Fedora/RHEL."
 
 # asus_key_hint
-asus_key_hint_group_title: "Abrir com a tecla ASUS"
+asus_key_hint_group_title: "Atalho"
 asus_key_hint_row_title: "Abrir com a tecla ASUS"
 asus_key_hint_row_subtitle: "Por motivos de segurança e arquitetura, o Ayuz não escuta teclas em segundo plano. Para abrir o app com a tecla ASUS, use os atalhos globais do seu ambiente gráfico (KDE, GNOME, etc.) e associe a tecla ao comando 'ayuz'."
 

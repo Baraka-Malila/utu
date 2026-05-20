@@ -155,7 +155,7 @@ fn_key_save_error: "Fehler beim Speichern: %{error}"
 fn_key_grubby_missing_warning: "Das Tool 'grubby' ist nicht installiert. Die automatische Änderung von Kernel-Parametern wird derzeit nur auf Fedora/RHEL-Distributionen unterstützt."
 
 # asus_key_hint
-asus_key_hint_group_title: "Starten über ASUS-Taste"
+asus_key_hint_group_title: "Tastenkürzel"
 asus_key_hint_row_title: "Starten über ASUS-Taste"
 asus_key_hint_row_subtitle: "Aus Sicherheits- und Architekturgründen lauscht Ayuz nicht auf Tastendrücke im Hintergrund. Um die App mit der dedizierten ASUS-Taste zu öffnen, nutze einfach die globalen Tastenkürzel-Einstellungen deiner Desktop-Umgebung oder deines Window Managers (z.B. KDE Benutzerdefinierte Tastenkürzel, GNOME-Einstellungen oder deine sxhkd/i3-Konfiguration) und weise der Taste den Start von 'ayuz' zu."
 
