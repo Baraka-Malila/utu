@@ -103,6 +103,7 @@ pub fn show(profile: FanProfile, enabled: bool) {
         let state = slot.as_mut().unwrap();
 
         state.label.set_label(&profile_label(profile));
+        state.window.set_opacity(1.0);
         state.window.set_visible(true);
         state.window.present();
 
@@ -114,7 +115,9 @@ pub fn show(profile: FanProfile, enabled: bool) {
             move || {
                 OSD.with(|cell| {
                     if let Some(s) = cell.borrow_mut().as_mut() {
-                        s.window.set_visible(false);
+                        // Keep the layer-shell surface mapped to avoid a
+                        // wl_surface.leave-after-destroy race on COSMIC.
+                        s.window.set_opacity(0.0);
                         s.timeout = None;
                     }
                 });

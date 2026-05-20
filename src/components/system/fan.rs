@@ -62,6 +62,8 @@ pub enum FanMsg {
 pub enum FanCommandOutput {
     /// Result of the initial `asusd` availability check.
     AsusdChecked(bool),
+    /// Initial profile read on startup — sync state without showing the OSD.
+    InitialProfile(FanProfile),
     /// Confirmation that the profile was successfully applied.
     ProfileSet(FanProfile),
     /// An error message to forward as a toast notification.
@@ -171,7 +173,7 @@ impl Component for FanModel {
 
                     match dbus::get_fan_profile().await {
                         Ok(current) if current == saved_profile => {
-                            out.emit(FanCommandOutput::ProfileSet(current));
+                            out.emit(FanCommandOutput::InitialProfile(current));
                         }
                         Ok(_) => match dbus::set_fan_profile(saved_profile).await {
                             Ok(p) => out.emit(FanCommandOutput::ProfileSet(p)),
@@ -263,6 +265,13 @@ impl Component for FanModel {
         match msg {
             FanCommandOutput::AsusdChecked(available) => {
                 self.asusd_available = available;
+            }
+            FanCommandOutput::InitialProfile(profile) => {
+                self.current_profile = profile;
+                self.check_performance.set_active(profile == FanProfile::Performance);
+                self.check_balanced.set_active(profile == FanProfile::Balanced);
+                self.check_quiet
+                    .set_active(profile == FanProfile::Quiet || profile == FanProfile::LowPower);
             }
             FanCommandOutput::ProfileSet(profile) => {
                 let name = match profile {
