@@ -189,3 +189,8 @@ pub(crate) fn is_kde_desktop() -> bool {
 pub(crate) fn is_gnome_desktop() -> bool {
     desktop_is("GNOME")
 }
+
+/// Returns `true` if the current desktop session is COSMIC.
+pub(crate) fn is_cosmic_desktop() -> bool {
+    desktop_is("COSMIC")
+}

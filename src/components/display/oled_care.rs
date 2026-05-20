@@ -19,8 +19,9 @@ use relm4::adw::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
 
+use super::cosmic_panel;
 use super::helpers::run_qdbus;
-use crate::services::commands::{is_kde_desktop, run_command_blocking};
+use crate::services::commands::{is_cosmic_desktop, is_kde_desktop, run_command_blocking};
 use crate::services::config::AppConfig;
 
 pub struct OledCareModel {
@@ -28,6 +29,7 @@ pub struct OledCareModel {
     panel_autohide_active: bool,
     transparency_active: bool,
     kde_available: bool,
+    panel_ctrl_available: bool,
 }
 
 #[derive(Debug)]
@@ -65,7 +67,7 @@ impl Component for OledCareModel {
             #[template]
             add = &crate::components::widgets::DaemonWarningLabel {
                 #[watch]
-                set_visible: !model.kde_available,
+                set_visible: !model.panel_ctrl_available,
                 set_label: &t!("kde_required_warning"),
             },
 
@@ -95,7 +97,7 @@ impl Component for OledCareModel {
                 #[watch]
                 set_active: model.panel_autohide_active,
                 #[watch]
-                set_sensitive: model.kde_available,
+                set_sensitive: model.panel_ctrl_available,
 
                 connect_active_notify[sender] => move |switch| {
                     sender.input(OledCareMsg::TogglePanelAutohide(switch.is_active()));
@@ -109,7 +111,7 @@ impl Component for OledCareModel {
                 #[watch]
                 set_active: model.transparency_active,
                 #[watch]
-                set_sensitive: model.kde_available,
+                set_sensitive: model.panel_ctrl_available,
 
                 connect_active_notify[sender] => move |switch| {
                     sender.input(OledCareMsg::ToggleTransparency(switch.is_active()));
@@ -125,11 +127,14 @@ impl Component for OledCareModel {
     ) -> ComponentParts<Self> {
         let config = AppConfig::load();
         let p = config.active_profile();
+        let kde = is_kde_desktop();
+        let cosmic = is_cosmic_desktop();
         let model = OledCareModel {
             pixel_refresh_active: p.oled_care_pixel_refresh,
             panel_autohide_active: p.oled_care_panel_autohide,
             transparency_active: p.oled_care_transparency,
-            kde_available: is_kde_desktop(),
+            kde_available: kde,
+            panel_ctrl_available: kde || cosmic,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -180,20 +185,34 @@ impl Component for OledCareModel {
 
                 AppConfig::update(|c| c.active_profile_mut().oled_care_panel_autohide = active);
 
-                let hiding = if active { "autohide" } else { "none" };
-                let script = format!("panels().forEach(function(p){{p.hiding='{}';}})", hiding);
-                sender.command(move |out, shutdown| {
-                    shutdown
-                        .register(async move {
-                            plasmashell_evaluate(
-                                &script,
-                                &out,
-                                OledCareCommandOutput::PanelSet(active),
-                            )
-                            .await;
-                        })
-                        .drop_on_shutdown()
-                });
+                if is_kde_desktop() {
+                    let hiding = if active { "autohide" } else { "none" };
+                    let script =
+                        format!("panels().forEach(function(p){{p.hiding='{}';}})", hiding);
+                    sender.command(move |out, shutdown| {
+                        shutdown
+                            .register(async move {
+                                plasmashell_evaluate(
+                                    &script,
+                                    &out,
+                                    OledCareCommandOutput::PanelSet(active),
+                                )
+                                .await;
+                            })
+                            .drop_on_shutdown()
+                    });
+                } else if is_cosmic_desktop() {
+                    sender.command(move |out, shutdown| {
+                        shutdown
+                            .register(async move {
+                                match cosmic_panel::set_autohide_all(active).await {
+                                    Ok(()) => out.emit(OledCareCommandOutput::PanelSet(active)),
+                                    Err(e) => out.emit(OledCareCommandOutput::Error(e)),
+                                }
+                            })
+                            .drop_on_shutdown()
+                    });
+                }
             }
             OledCareMsg::ToggleTransparency(active) => {
                 if active == self.transparency_active {
@@ -203,30 +222,48 @@ impl Component for OledCareModel {
 
                 AppConfig::update(|c| c.active_profile_mut().oled_care_transparency = active);
 
-                let opacity = if active { "transparent" } else { "opaque" };
-                let script = format!("panels().forEach(function(p){{p.opacity='{}';}})", opacity);
-                sender.command(move |out, shutdown| {
-                    shutdown
-                        .register(async move {
-                            plasmashell_evaluate(
-                                &script,
-                                &out,
-                                OledCareCommandOutput::TransparencySet(active),
-                            )
-                            .await;
-                        })
-                        .drop_on_shutdown()
-                });
+                if is_kde_desktop() {
+                    let opacity = if active { "transparent" } else { "opaque" };
+                    let script =
+                        format!("panels().forEach(function(p){{p.opacity='{}';}})", opacity);
+                    sender.command(move |out, shutdown| {
+                        shutdown
+                            .register(async move {
+                                plasmashell_evaluate(
+                                    &script,
+                                    &out,
+                                    OledCareCommandOutput::TransparencySet(active),
+                                )
+                                .await;
+                            })
+                            .drop_on_shutdown()
+                    });
+                } else if is_cosmic_desktop() {
+                    sender.command(move |out, shutdown| {
+                        shutdown
+                            .register(async move {
+                                match cosmic_panel::set_opacity_all(active).await {
+                                    Ok(()) => {
+                                        out.emit(OledCareCommandOutput::TransparencySet(active))
+                                    }
+                                    Err(e) => out.emit(OledCareCommandOutput::Error(e)),
+                                }
+                            })
+                            .drop_on_shutdown()
+                    });
+                }
             }
             OledCareMsg::LoadProfile {
                 pixel_refresh,
                 panel_autohide,
                 transparency,
             } => {
-                if !self.kde_available {
+                if !self.panel_ctrl_available {
                     return;
                 }
-                sender.input(OledCareMsg::TogglePixelRefresh(pixel_refresh));
+                if self.kde_available {
+                    sender.input(OledCareMsg::TogglePixelRefresh(pixel_refresh));
+                }
                 sender.input(OledCareMsg::TogglePanelAutohide(panel_autohide));
                 sender.input(OledCareMsg::ToggleTransparency(transparency));
             }

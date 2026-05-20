@@ -15,6 +15,7 @@
 // along with this program.  If not, see https://www.gnu.org/licenses/.
 
 pub mod color_gamut;
+pub(crate) mod cosmic_panel;
 pub(crate) mod helpers;
 pub mod oled_care;
 pub mod oled_dimming;
