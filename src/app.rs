@@ -29,6 +29,7 @@ use crate::components::display::oled_care::OledCareMsg;
 use crate::components::display::oled_dimming::OledDimmingMsg;
 use crate::components::display::target_mode::TargetModeMsg;
 use crate::components::keyboard::auto_backlight::AutoBacklightMsg;
+use crate::components::keyboard::auto_backlight::AutoBacklightOutput;
 use crate::components::keyboard::backlight_idle::BacklightIdleMsg;
 use crate::components::keyboard::fn_key::FnKeyMsg;
 use crate::components::touchpad::gestures::GesturesMsg;
@@ -118,6 +119,8 @@ pub enum AppMsg {
     LegacyMigrationAccepted,
     LegacyMigrationDeclined,
     TriggerManualMigration,
+    /// Ambient keyboard-backlight settings changed; rebuild the idle-timeout resume command.
+    AmbientBacklightChanged,
 }
 
 pub struct AppModel {
@@ -290,6 +293,9 @@ impl SimpleComponent for AppModel {
                     c.skip_legacy_migration = true;
                 });
             }
+            AppMsg::AmbientBacklightChanged => {
+                self.backlight_idle.sender().emit(BacklightIdleMsg::AmbientChanged);
+            }
             AppMsg::TriggerManualMigration => {
                 if !crate::services::migration::legacy_dir_exists() {
                     return;
@@ -343,7 +349,12 @@ impl SimpleComponent for AppModel {
         let gestures = launch_component!(GesturesModel, sender);
         let numberpad = launch_component!(NumberpadModel, sender);
         let touchpad = launch_component!(TouchpadModel, sender);
-        let auto_backlight = launch_component!(AutoBacklightModel, sender);
+        let auto_backlight = AutoBacklightModel::builder()
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                AutoBacklightOutput::Error(e) => AppMsg::Error(e),
+                AutoBacklightOutput::AmbientChanged => AppMsg::AmbientBacklightChanged,
+            });
         let backlight_idle = launch_component!(BacklightIdleModel, sender);
         let sound_modes = launch_component!(SoundModesModel, sender);
         let volume_widget = launch_component!(VolumeModel, sender);

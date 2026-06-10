@@ -97,11 +97,22 @@ pub enum AutoBacklightCommandOutput {
     LuxUpdated(f64),
 }
 
+/// Messages forwarded to the parent component.
+///
+/// [`AmbientChanged`](AutoBacklightOutput::AmbientChanged) notifies the parent that the ambient
+/// automation settings were changed interactively, so the idle-timeout component can rebuild its
+/// `swayidle` resume command with the new flags and thresholds (issue #39).
+#[derive(Debug)]
+pub enum AutoBacklightOutput {
+    Error(String),
+    AmbientChanged,
+}
+
 #[relm4::component(pub)]
 impl Component for AutoBacklightModel {
     type Init = ();
     type Input = AutoBacklightMsg;
-    type Output = String;
+    type Output = AutoBacklightOutput;
     type CommandOutput = AutoBacklightCommandOutput;
 
     view! {
@@ -239,25 +250,29 @@ impl Component for AutoBacklightModel {
             AutoBacklightMsg::ToggleAutoBrighten(active) => {
                 self.auto_brighten = active;
                 AppConfig::update(|c| c.active_profile_mut().kbd_brighten_active = active);
-                self.update_sensor_loop(sender);
+                self.update_sensor_loop(sender.clone());
+                let _ = sender.output(AutoBacklightOutput::AmbientChanged);
             }
             AutoBacklightMsg::ToggleAutoDim(active) => {
                 self.auto_dim = active;
                 AppConfig::update(|c| c.active_profile_mut().kbd_dim_active = active);
-                self.update_sensor_loop(sender);
+                self.update_sensor_loop(sender.clone());
+                let _ = sender.output(AutoBacklightOutput::AmbientChanged);
             }
             AutoBacklightMsg::BrightenThresholdChanged(value) => {
                 if (value - self.brighten_threshold).abs() > f64::EPSILON {
                     self.brighten_threshold = value;
                     AppConfig::update(|c| c.active_profile_mut().kbd_brighten_threshold = value);
-                    self.update_sensor_loop(sender);
+                    self.update_sensor_loop(sender.clone());
+                    let _ = sender.output(AutoBacklightOutput::AmbientChanged);
                 }
             }
             AutoBacklightMsg::DimThresholdChanged(value) => {
                 if (value - self.dim_threshold).abs() > f64::EPSILON {
                     self.dim_threshold = value;
                     AppConfig::update(|c| c.active_profile_mut().kbd_dim_threshold = value);
-                    self.update_sensor_loop(sender);
+                    self.update_sensor_loop(sender.clone());
+                    let _ = sender.output(AutoBacklightOutput::AmbientChanged);
                 }
             }
             AutoBacklightMsg::LoadProfile {
@@ -297,7 +312,7 @@ impl Component for AutoBacklightModel {
                 }
             }
             AutoBacklightCommandOutput::Error(e) => {
-                let _ = sender.output(e);
+                let _ = sender.output(AutoBacklightOutput::Error(e));
             }
             AutoBacklightCommandOutput::LuxUpdated(lux) => {
                 self.current_lux = Some(lux);

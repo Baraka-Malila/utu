@@ -46,6 +46,22 @@ impl From<u32> for TimeoutMode {
 
 const TIMEOUT_SECONDS: [u32; 3] = [60, 120, 300];
 
+/// Wraps a shell command so it only runs while on battery power.
+///
+/// When `battery_only` is `true`, `base` is guarded by a conditional that reads the first
+/// `online` sysfs file and skips execution when the device is plugged in to AC power. The
+/// guard tolerates a multi-statement `base` (statements separated by `;`).
+fn battery_guard(base: &str, battery_only: bool) -> String {
+    if battery_only {
+        format!(
+            "if [ \"$(cat /sys/class/power_supply/*/online | head -n1)\" = \"0\" ]; \
+             then {base}; fi"
+        )
+    } else {
+        base.to_string()
+    }
+}
+
 /// Builds a `busctl` command string to set keyboard backlight brightness via UPower.
 ///
 /// When `battery_only` is `true`, the command is wrapped in a shell conditional that reads
@@ -56,14 +72,52 @@ fn busctl_brightness_cmd(value: i32, battery_only: bool) -> String {
          /org/freedesktop/UPower/KbdBacklight \
          org.freedesktop.UPower.KbdBacklight SetBrightness i {value}"
     );
-    if battery_only {
-        format!(
-            "if [ \"$(cat /sys/class/power_supply/*/online | head -n1)\" = \"0\" ]; \
-             then {base}; fi"
-        )
-    } else {
-        base
+    battery_guard(&base, battery_only)
+}
+
+/// Builds the `busctl` resume command `swayidle` runs when the user returns from idle.
+///
+/// When ambient automation is active, the restored brightness honours the current ambient
+/// light instead of unconditionally jumping to full (issue #39): the live `LightLevel` is read
+/// from `iio-sensor-proxy` and compared against the same thresholds the ambient loop uses, so
+/// the keyboard does not turn on at full brightness when resuming in a well-lit room. If neither
+/// automation is enabled — or the sensor value cannot be read — it falls back to full brightness,
+/// matching the prior behaviour.
+fn busctl_resume_cmd(
+    battery_only: bool,
+    auto_brighten: bool,
+    brighten_threshold: f64,
+    auto_dim: bool,
+    dim_threshold: f64,
+) -> String {
+    if !auto_brighten && !auto_dim {
+        return busctl_brightness_cmd(3, battery_only);
     }
+
+    // Read the live ambient level held by the ambient loop's sensor claim. `$lvl` is empty when
+    // the sensor is unavailable, in which case the rules below leave `v` at its default of 3.
+    let read_lux = "lvl=$(busctl --system get-property net.hadess.SensorProxy \
+        /net/hadess/SensorProxy net.hadess.SensorProxy LightLevel 2>/dev/null | awk '{print $2}')";
+
+    // Default to full brightness, then apply the active ambient rules: dim to off in a bright
+    // room, raise to full in a dark one — mirroring `light_sensor_logic` in `auto_backlight`.
+    let mut decide = String::from("v=3");
+    if auto_dim {
+        decide.push_str(&format!(
+            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl > {dim_threshold})}}\"; then v=0; fi"
+        ));
+    }
+    if auto_brighten {
+        decide.push_str(&format!(
+            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl < {brighten_threshold})}}\"; then v=3; fi"
+        ));
+    }
+
+    let set = "busctl call --system org.freedesktop.UPower \
+        /org/freedesktop/UPower/KbdBacklight \
+        org.freedesktop.UPower.KbdBacklight SetBrightness i $v";
+
+    battery_guard(&format!("{read_lux}; {decide}; {set}"), battery_only)
 }
 
 pub struct BacklightIdleModel {
@@ -86,6 +140,9 @@ pub enum BacklightIdleMsg {
         ac_index: u32,
         battery_index: u32,
     },
+    /// Rebuild the running `swayidle` so its resume command picks up changed ambient
+    /// automation settings (issue #39). No-op when no timeout is active.
+    AmbientChanged,
 }
 
 #[derive(Debug)]
@@ -241,6 +298,10 @@ impl Component for BacklightIdleModel {
                 self.dropdown_battery_only.set_selected(battery_index);
                 self.apply_timeout(timeout_mode, &sender);
             }
+            BacklightIdleMsg::AmbientChanged => {
+                let mode = self.timeout_mode;
+                self.apply_timeout(mode, &sender);
+            }
         }
     }
 
@@ -288,7 +349,18 @@ impl BacklightIdleModel {
 
         let battery_only = mode == TimeoutMode::BatteryOnly;
         let timeout_cmd = busctl_brightness_cmd(0, battery_only);
-        let resume_cmd = busctl_brightness_cmd(3, battery_only);
+
+        // Make the resume restore ambient-aware so returning from idle in a lit room does not
+        // force the backlight to full brightness (issue #39).
+        let config = AppConfig::load();
+        let p = config.active_profile();
+        let resume_cmd = busctl_resume_cmd(
+            battery_only,
+            p.kbd_brighten_active,
+            p.kbd_brighten_threshold,
+            p.kbd_dim_active,
+            p.kbd_dim_threshold,
+        );
         let seconds_str = seconds.to_string();
 
         let cmd_sender = sender.command_sender().clone();
