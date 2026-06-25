@@ -79,10 +79,12 @@ fn busctl_brightness_cmd(value: i32, battery_only: bool) -> String {
 ///
 /// When ambient automation is active, the restored brightness honours the current ambient
 /// light instead of unconditionally jumping to full (issue #39): the live `LightLevel` is read
-/// from `iio-sensor-proxy` and compared against the same thresholds the ambient loop uses, so
-/// the keyboard does not turn on at full brightness when resuming in a well-lit room. If neither
-/// automation is enabled — or the sensor value cannot be read — it falls back to full brightness,
-/// matching the prior behaviour.
+/// from `iio-sensor-proxy` and compared against the same thresholds the ambient loop uses. Resume
+/// defaults to full brightness but drops to off when the room is bright enough — at or above
+/// `brighten_threshold` for auto-brighten, above `dim_threshold` for auto-dim — so the keyboard
+/// does not turn on at full brightness when resuming in a well-lit room. If neither automation is
+/// enabled — or the sensor value cannot be read — it falls back to full brightness, matching the
+/// prior behaviour.
 fn busctl_resume_cmd(
     battery_only: bool,
     auto_brighten: bool,
@@ -99,8 +101,13 @@ fn busctl_resume_cmd(
     let read_lux = "lvl=$(busctl --system get-property net.hadess.SensorProxy \
         /net/hadess/SensorProxy net.hadess.SensorProxy LightLevel 2>/dev/null | awk '{print $2}')";
 
-    // Default to full brightness, then apply the active ambient rules: dim to off in a bright
-    // room, raise to full in a dark one — mirroring `light_sensor_logic` in `auto_backlight`.
+    // Default to full brightness — this is also the fallback when the sensor value can't be read
+    // (`$lvl` empty) — then turn the backlight off when the ambient light shows the room is bright
+    // enough not to need it. The thresholds mirror `light_sensor_logic` in `auto_backlight`:
+    // auto-brighten only lights the keyboard while `level < brighten_threshold`, so at or above
+    // that level the room is "not dark" and resume must stay off; auto-dim treats `level >
+    // dim_threshold` as "bright". Either condition resumes to off instead of full, so typing in a
+    // well-lit room no longer turns the keyboard on at full brightness (issue #39).
     let mut decide = String::from("v=3");
     if auto_dim {
         decide.push_str(&format!(
@@ -109,7 +116,7 @@ fn busctl_resume_cmd(
     }
     if auto_brighten {
         decide.push_str(&format!(
-            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl < {brighten_threshold})}}\"; then v=3; fi"
+            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl >= {brighten_threshold})}}\"; then v=0; fi"
         ));
     }
 
