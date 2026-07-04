@@ -1,12 +1,25 @@
 <h1 align="center">
-  <img src="assets/trayicon.png" alt="Ayuz icon" width="128" height="128"/>
+  <img src="assets/trayicon.png" alt="Utu icon" width="128" height="128"/>
   <br>
-  Ayuz
+  Utu — ASUS Laptop Control for Ubuntu
 </h1>
 
 <p align="center">
-  A centralized settings application for ASUS laptops on Linux - bringing together hardware controls, display tuning, audio profiles, and system management in one place.
+  A GTK4/libadwaita control centre for ASUS laptops on Ubuntu 24.04 (Noble).
+  Brings together GPU switching, power profiles, keyboard backlight, battery care,
+  audio, and more in one place — installed with a single <code>apt install asus-suite</code>.
 </p>
+
+<p align="center">
+  <strong>Tested on:</strong> ASUS TUF Gaming A15 FA507NV · Ubuntu 24.04 · GNOME
+</p>
+
+> Utu is a fork of <a href="https://github.com/Traciges/Ayuz">Ayuz</a> by Guido Philipp,
+> adapted for Ubuntu/GNOME with an Armoury Crate key handler and GDM3 display-server
+> restart support. Ayuz copyright headers are preserved in all forked source files
+> per the GPL-3.0 licence.
+
+---
 
 <p align="center">
   <strong>Tested on:</strong> ASUS Zenbook S16 · Fedora 43 · KDE Plasma

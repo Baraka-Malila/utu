@@ -1,15 +1,15 @@
 [package]
-name = "ayuz"
-version = "1.1.7"
+name = "utu"
+version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/Traciges/Ayuz"
-description = "Unofficial MyAsus Clone for Asus Laptops"
-authors = ["Guido Philipp"]
+repository = "https://github.com/Baraka-Malila/utu"
+description = "ASUS laptop control centre for Ubuntu"
+authors = ["Guido Philipp", "Baraka Malila"]
 
 [dependencies]
 relm4 = { version = "0.10", features = ["libadwaita"] }
-libadwaita = { version = "0.8", features = ["v1_8"] }
+libadwaita = { version = "0.8", features = ["v1_5"] }
 gtk4 = { version = "0.10", features = ["v4_14"] }
 gtk4-layer-shell = "0.6"
 zbus = { version = "5", default-features = false, features = ["tokio"] }

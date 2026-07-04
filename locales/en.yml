@@ -1,4 +1,4 @@
-app_title: "Ayuz"
+app_title: "Utu"
 search_placeholder: "Search settings..."
 search_no_results: "No results found"
 search_results_title: "Search Results"
@@ -393,3 +393,7 @@ fan_osd_enabled_title: "Show fan profile overlay"
 fan_osd_enabled_subtitle: "Display a brief on-screen indicator whenever the fan profile changes."
 fan_hotkey_listening: 'FN+F fan-key listener active on "%{device}"'
 error_fan_hotkey_no_device: "No ASUS hotkey input device found; FN+F fan-mode shortcut disabled."
+gpu_restart_title: "Restart Display Server?"
+gpu_restart_body: "The GPU mode has changed. Restarting GDM3 will log you out and apply the new mode immediately."
+gpu_restart_now: "Restart Now"
+gpu_restart_later: "Later"

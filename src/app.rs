@@ -127,7 +127,7 @@ pub struct AppModel {
     start_hidden: bool,
     window: gtk4::glib::WeakRef<adw::ApplicationWindow>,
     toast_overlay: adw::ToastOverlay,
-    _tray: ksni::Handle<tray::AyuzTray>,
+    _tray: ksni::Handle<tray::UtuTray>,
     home: Controller<HomeModel>,
     apu_mem: Controller<ApuMemModel>,
     battery: Controller<BatteryModel>,
@@ -359,7 +359,7 @@ impl SimpleComponent for AppModel {
         let sound_modes = launch_component!(SoundModesModel, sender);
         let volume_widget = launch_component!(VolumeModel, sender);
 
-        let tray_svc = ksni::TrayService::new(tray::AyuzTray {
+        let tray_svc = ksni::TrayService::new(tray::UtuTray {
             app_sender: sender.input_sender().clone(),
         });
         let tray_handle = tray_svc.handle();
@@ -373,14 +373,14 @@ impl SimpleComponent for AppModel {
         tokio::spawn(crate::services::fan_hotkey::run(fan_sender, fan_hotkey_rx));
 
         // Abstract Unix socket listener for `ayuz --toggle-numberpad`. The
-        // CLI short-circuit in main.rs connects to "\0ayuz-numberpad" and
+        // CLI short-circuit in main.rs connects to "\0utu-numberpad" and
         // writes one byte; each byte received here flips the NumberPad
         // Active/Idle state at runtime without re-launching the GUI.
         let numberpad_sender = numberpad.sender().clone();
         tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
             use tokio::net::UnixListener;
-            let addr = match abstract_socket_addr("ayuz-numberpad") {
+            let addr = match abstract_socket_addr("utu-numberpad") {
                 Some(a) => a,
                 None => return,
             };
