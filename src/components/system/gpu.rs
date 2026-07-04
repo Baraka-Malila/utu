@@ -211,7 +211,7 @@ impl Component for GpuModel {
         &mut self,
         msg: GpuCommandOutput,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match msg {
             GpuCommandOutput::SupergfxctlChecked(available) => {
@@ -244,6 +244,23 @@ impl Component for GpuModel {
                     "{}",
                     t!("gpu_mode_set", mode = t!(mode.i18n_key()).to_string())
                 );
+                let dialog = adw::AlertDialog::builder()
+                    .heading(&t!("gpu_restart_title"))
+                    .body(&t!("gpu_restart_body"))
+                    .build();
+                dialog.add_response("later", &t!("gpu_restart_later"));
+                dialog.add_response("now", &t!("gpu_restart_now"));
+                dialog.set_response_appearance("now", adw::ResponseAppearance::Suggested);
+                dialog.set_default_response(Some("later"));
+                dialog.set_close_response("later");
+                dialog.connect_response(None, |_, response| {
+                    if response == "now" {
+                        let _ = std::process::Command::new("pkexec")
+                            .args(["systemctl", "restart", "gdm3"])
+                            .spawn();
+                    }
+                });
+                dialog.present(Some(root));
             }
             GpuCommandOutput::Error(e) => {
                 let _ = sender.output(e);
