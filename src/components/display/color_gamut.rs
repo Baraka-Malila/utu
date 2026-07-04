@@ -27,9 +27,9 @@ use crate::services::{commands::is_kde_desktop, config::AppConfig};
 
 fn filename_for_index(index: u32) -> Option<&'static str> {
     match index {
-        1 => Some("Ayuz_sRGB.icm"),
-        2 => Some("Ayuz_DCIP3.icm"),
-        3 => Some("Ayuz_DisplayP3.icm"),
+        1 => Some("Utu_sRGB.icm"),
+        2 => Some("Utu_DCIP3.icm"),
+        3 => Some("Utu_DisplayP3.icm"),
         _ => None,
     }
 }

@@ -21,14 +21,11 @@ use relm4::adw::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
 
-use crate::components::display::helpers::DISPLAY_NAME;
-use crate::services::commands::{is_kde_desktop, run_command_blocking};
 use crate::services::config::AppConfig;
-use crate::services::kde_brightness::BrightnessControlProxy;
+use crate::services::gnome_brightness::GnomeBrightnessControlProxy;
 
 pub struct OledDimmingModel {
     brightness: u32,
-    kde_available: bool,
     debounce_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -59,21 +56,11 @@ impl Component for OledDimmingModel {
 
             #[template]
             add = &crate::components::widgets::DaemonWarningLabel {
-                #[watch]
-                set_visible: !model.kde_available,
-                set_label: &t!("kde_required_warning"),
-            },
-
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
                 set_label: &t!("oled_dimming_warning"),
             },
 
             add = &adw::ActionRow {
                 set_title: &t!("oled_dimming_slider_title"),
-
-                #[watch]
-                set_sensitive: model.kde_available,
 
                 add_suffix = &gtk::Scale {
                     set_orientation: gtk::Orientation::Horizontal,
@@ -107,7 +94,6 @@ impl Component for OledDimmingModel {
 
         let model = OledDimmingModel {
             brightness,
-            kde_available: is_kde_desktop(),
             debounce_task: None,
         };
         let widgets = view_output!();
@@ -152,9 +138,6 @@ impl Component for OledDimmingModel {
                 });
             }
             OledDimmingMsg::LoadProfile(value) => {
-                if !self.kde_available {
-                    return;
-                }
                 self.brightness = value;
                 sender.command(move |out, shutdown| {
                     shutdown
@@ -205,8 +188,7 @@ impl Component for OledDimmingModel {
 }
 
 async fn apply_dimming(value: u32) -> Result<(), String> {
-    let arg = format!("output.{}.dimming.{}", DISPLAY_NAME, value);
-    run_command_blocking("kscreen-doctor", &[&arg]).await
+    crate::services::gnome_brightness::set_brightness_absolute(value as i32).await
 }
 
 async fn start_brightness_listener(out: relm4::Sender<OledDimmingCommandOutput>) {
@@ -214,7 +196,7 @@ async fn start_brightness_listener(out: relm4::Sender<OledDimmingCommandOutput>)
         Ok(c) => c,
         Err(_) => return,
     };
-    let proxy = match BrightnessControlProxy::new(&conn).await {
+    let proxy = match GnomeBrightnessControlProxy::new(&conn).await {
         Ok(p) => p,
         Err(_) => return,
     };

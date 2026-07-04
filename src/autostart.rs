@@ -17,7 +17,7 @@
 use directories::BaseDirs;
 use std::path::PathBuf;
 
-const DESKTOP_FILENAME: &str = "de.guido.ayuz.desktop";
+const DESKTOP_FILENAME: &str = "io.github.baraka_malila.utu.desktop";
 
 fn autostart_path() -> Option<PathBuf> {
     BaseDirs::new().map(|d| d.config_dir().join("autostart").join(DESKTOP_FILENAME))
@@ -37,8 +37,8 @@ pub fn set_enabled(enable: bool) {
         }
         let content = "[Desktop Entry]\n\
             Type=Application\n\
-            Name=Ayuz\n\
-            Exec=ayuz --hidden\n\
+            Name=Utu\n\
+            Exec=utu --hidden\n\
             Hidden=false\n\
             StartupNotify=false\n\
             X-GNOME-Autostart-enabled=true\n";

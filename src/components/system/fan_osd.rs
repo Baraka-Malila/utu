@@ -53,7 +53,7 @@ fn build() -> OsdState {
     if gtk4_layer_shell::is_supported() {
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
-        window.set_namespace(Some("ayuz-osd"));
+        window.set_namespace(Some("utu-osd"));
         window.set_anchor(Edge::Bottom, true);
         window.set_margin(Edge::Bottom, 80);
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);

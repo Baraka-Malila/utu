@@ -251,7 +251,7 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn config_dir() -> Option<std::path::PathBuf> {
-        ProjectDirs::from("", "", "ayuz").map(|dirs| dirs.config_dir().to_path_buf())
+        ProjectDirs::from("io.github", "baraka_malila", "utu").map(|dirs| dirs.config_dir().to_path_buf())
     }
 
     fn config_path() -> Option<std::path::PathBuf> {

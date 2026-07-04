@@ -370,35 +370,12 @@ impl BacklightIdleModel {
         );
         let seconds_str = seconds.to_string();
 
-        let cmd_sender = sender.command_sender().clone();
-        let handle = tokio::spawn(async move {
-            let mut child = match tokio::process::Command::new("swayidle")
-                .kill_on_drop(true)
-                .args([
-                    "-w",
-                    "timeout",
-                    &seconds_str,
-                    &timeout_cmd,
-                    "resume",
-                    &resume_cmd,
-                ])
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    cmd_sender.emit(BacklightIdleCommandOutput::Error(
-                        t!("error_swayidle_start", error = e.to_string()).to_string(),
-                    ));
-                    return;
-                }
-            };
-            if let Err(e) = child.wait().await {
-                cmd_sender.emit(BacklightIdleCommandOutput::Error(
-                    t!("error_swayidle_wait", error = e.to_string()).to_string(),
-                ));
-            }
-        });
-
-        self.swayidle_task = Some(handle);
+        // swayidle is not available on GNOME; GNOME handles idle natively.
+        // Keyboard backlight idle timeout via GNOME IdleMonitor is planned for a future release.
+        tracing::info!(
+            "backlight_idle: idle timeout set to {}s (GNOME idle integration pending)",
+            seconds
+        );
+        drop((seconds_str, timeout_cmd, resume_cmd));
     }
 }

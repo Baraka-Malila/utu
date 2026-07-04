@@ -26,9 +26,9 @@ use rust_i18n::t;
 /// `kscreen-doctor` output name for the built-in laptop display.
 pub(crate) const DISPLAY_NAME: &str = "eDP-1";
 
-const SRGB_ICM: &[u8] = include_bytes!("../../../assets/icm/Ayuz_sRGB.icm");
-const DCIP3_ICM: &[u8] = include_bytes!("../../../assets/icm/Ayuz_DCIP3.icm");
-const DISPLAYP3_ICM: &[u8] = include_bytes!("../../../assets/icm/Ayuz_DisplayP3.icm");
+const SRGB_ICM: &[u8] = include_bytes!("../../../assets/icm/Utu_sRGB.icm");
+const DCIP3_ICM: &[u8] = include_bytes!("../../../assets/icm/Utu_DCIP3.icm");
+const DISPLAYP3_ICM: &[u8] = include_bytes!("../../../assets/icm/Utu_DisplayP3.icm");
 
 /// Extracts the bundled ICM files to `~/.config/ayuz/icm/` and returns that directory path.
 ///
@@ -45,9 +45,9 @@ pub(crate) async fn setup_icm_profiles() -> Result<std::path::PathBuf, String> {
             .map_err(|e| t!("error_icm_dir_create", error = e.to_string()).to_string())?;
 
         for (name, data) in [
-            ("Ayuz_sRGB.icm", SRGB_ICM),
-            ("Ayuz_DCIP3.icm", DCIP3_ICM),
-            ("Ayuz_DisplayP3.icm", DISPLAYP3_ICM),
+            ("Utu_sRGB.icm", SRGB_ICM),
+            ("Utu_DCIP3.icm", DCIP3_ICM),
+            ("Utu_DisplayP3.icm", DISPLAYP3_ICM),
         ] {
             let path = base_clone.join(name);
             if !path.exists() {
@@ -64,25 +64,19 @@ pub(crate) async fn setup_icm_profiles() -> Result<std::path::PathBuf, String> {
     Ok(base)
 }
 
-/// Resets the display color profile to the monitor's built-in EDID default via `kscreen-doctor`.
+/// Resets the display color profile to the monitor's built-in EDID default.
+/// ICC profile management via colord is planned; not yet implemented for GNOME.
 pub(crate) async fn reset_icm_profile() -> Result<(), String> {
-    let arg = format!("output.{}.colorProfileSource.EDID", DISPLAY_NAME);
-    run_command_blocking("kscreen-doctor", &[&arg]).await
+    Err("ICC profile reset not yet supported on GNOME (colord support planned)".to_string())
 }
 
-/// Applies an ICC profile file to [`DISPLAY_NAME`] via `kscreen-doctor`.
-///
-/// The argument format is `output.<display>.iccprofile.<absolute_path>`.
+/// Applies an ICC profile file to the built-in display.
+/// ICC profile management via colord is planned; not yet implemented for GNOME.
 pub(crate) async fn apply_icm_profile(
-    filename: &str,
-    base_path: &std::path::Path,
+    _filename: &str,
+    _base_path: &std::path::Path,
 ) -> Result<(), String> {
-    let arg = format!(
-        "output.{}.iccprofile.{}",
-        DISPLAY_NAME,
-        base_path.join(filename).display()
-    );
-    run_command_blocking("kscreen-doctor", &[&arg]).await
+    Err("ICC profile application not yet supported on GNOME (colord support planned)".to_string())
 }
 
 /// Invokes a D-Bus method via the `qdbus` command-line tool.

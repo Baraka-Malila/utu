@@ -246,7 +246,7 @@ fn build_virtual_device() -> std::io::Result<VirtualDevice> {
         KeyCode::KEY_5,
     ]);
     VirtualDevice::builder()?
-        .name("Ayuz NumberPad")
+        .name("Utu NumberPad")
         .with_keys(&keys)?
         .build()
 }

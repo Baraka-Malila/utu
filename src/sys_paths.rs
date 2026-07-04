@@ -47,5 +47,5 @@ pub fn anime_assets_dir() -> std::path::PathBuf {
         .unwrap_or(std::path::Path::new("/usr/bin"))
         .parent()
         .unwrap_or(std::path::Path::new("/usr"))
-        .join("share/ayuz/anime")
+        .join("share/utu/anime")
 }
