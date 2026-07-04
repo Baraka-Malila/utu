@@ -372,7 +372,10 @@ impl SimpleComponent for AppModel {
             tokio::sync::watch::channel(initial_fan_hotkey_enabled);
         tokio::spawn(crate::services::fan_hotkey::run(fan_sender, fan_hotkey_rx));
 
-        // Abstract Unix socket listener for `ayuz --toggle-numberpad`. The
+        let armoury_sender = sender.input_sender().clone();
+        tokio::spawn(crate::services::armoury_key::run(armoury_sender));
+
+        // Abstract Unix socket listener for `utu --toggle-numberpad`. The
         // CLI short-circuit in main.rs connects to "\0utu-numberpad" and
         // writes one byte; each byte received here flips the NumberPad
         // Active/Idle state at runtime without re-launching the GUI.
