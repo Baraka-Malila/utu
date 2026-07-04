@@ -1,0 +1,8 @@
+utu (0.1.0~noble1) noble; urgency=medium
+
+  * Phase 3: initial utu release — fork of Ayuz adapted for Ubuntu/GNOME
+  * Add Armoury Crate key handler (KEY_PROG1 raises window)
+  * Add GDM3 restart prompt after GPU mode switch
+  * Replace KDE brightness D-Bus with GNOME SettingsDaemon
+
+ -- Baraka Malila <bmalila87@gmail.com>  Fri, 04 Jul 2026 00:00:00 +0000

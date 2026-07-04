@@ -1,0 +1,22 @@
+Source: utu
+Section: gnome
+Priority: optional
+Maintainer: Baraka Malila <bmalila87@gmail.com>
+Build-Depends: debhelper-compat (= 13), cargo, pkg-config,
+ libgtk-4-dev (>= 4.14), libadwaita-1-dev (>= 1.5),
+ libdbus-1-dev, libevdev-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/Baraka-Malila/utu
+Rules-Requires-Root: no
+
+Package: utu
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, asusctl, supergfxctl
+Description: ASUS laptop control centre for Ubuntu
+ Utu is a GTK4/libadwaita GUI for ASUS laptops on Ubuntu 24.04.
+ It provides control over power profiles, GPU switching, keyboard
+ backlight, battery charge limit, and more. Hardware features not
+ present on the current laptop (AniMatrix, NumberPad, OLED) are
+ automatically detected and greyed out.
+ .
+ Utu is a fork of Ayuz by Guido Philipp, adapted for Ubuntu/GNOME.
