@@ -19,8 +19,7 @@ use relm4::adw::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
 
-use crate::components::display::helpers::run_qdbus;
-use crate::services::commands::{is_gnome_desktop, is_kde_desktop, run_command_blocking};
+use crate::services::commands::{is_gnome_desktop, is_kde_desktop, run_command_blocking, run_qdbus};
 use crate::services::config::AppConfig;
 
 /// State for the touchpad enable/disable component.

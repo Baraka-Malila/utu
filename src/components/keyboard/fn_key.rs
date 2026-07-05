@@ -23,9 +23,24 @@ use rust_i18n::t;
 use crate::services::commands::{run_command_blocking, which_exists};
 use crate::services::config::AppConfig;
 
+/// Builds a root shell script that patches `/etc/default/grub` and runs
+/// `update-grub`. Removes any existing `asus_wmi.fnlock_default` entry from
+/// `GRUB_CMDLINE_LINUX_DEFAULT` then appends the new value.
+/// `locked=true` → fnlock_default=0 (fn keys are media keys by default, locked in that mode)
+/// `locked=false` → fnlock_default=1 (fn keys are F1-F12 by default)
+fn build_grub_script(locked: bool) -> String {
+    let value = if locked { "0" } else { "1" };
+    format!(
+        r#"sed -i 's/ asus_wmi\.fnlock_default=[^ "]*//g' /etc/default/grub && \
+sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 asus_wmi.fnlock_default={}"/g' /etc/default/grub && \
+update-grub"#,
+        value
+    )
+}
+
 pub struct FnKeyModel {
     locked: bool,
-    grubby_available: bool,
+    update_grub_available: bool,
     check_locked: gtk::CheckButton,
     check_normal: gtk::CheckButton,
     row_hint: adw::ActionRow,
@@ -41,7 +56,7 @@ pub enum FnKeyMsg {
 
 #[derive(Debug)]
 pub enum FnKeyCommandOutput {
-    GrubbyChecked(bool),
+    UpdateGrubChecked(bool),
     Set(bool),
     Error(String),
 }
@@ -61,8 +76,8 @@ impl Component for FnKeyModel {
             #[template]
             add = &crate::components::widgets::DaemonWarningLabel {
                 #[watch]
-                set_visible: !model.grubby_available,
-                set_label: &t!("fn_key_grubby_missing_warning"),
+                set_visible: !model.update_grub_available,
+                set_label: &t!("fn_key_update_grub_missing_warning"),
             },
 
             add = &model.row_hint.clone(),
@@ -124,7 +139,7 @@ impl Component for FnKeyModel {
 
         let model = FnKeyModel {
             locked,
-            grubby_available: false,
+            update_grub_available: false,
             check_locked,
             check_normal,
             row_hint,
@@ -137,8 +152,8 @@ impl Component for FnKeyModel {
         sender.command(|out, shutdown| {
             shutdown
                 .register(async move {
-                    let ok = which_exists("grubby").await;
-                    out.send(FnKeyCommandOutput::GrubbyChecked(ok)).ok();
+                    let ok = which_exists("update-grub").await;
+                    out.send(FnKeyCommandOutput::UpdateGrubChecked(ok)).ok();
                 })
                 .drop_on_shutdown()
         });
@@ -153,24 +168,11 @@ impl Component for FnKeyModel {
                 self.check_locked.set_active(locked);
                 self.check_normal.set_active(!locked);
 
-                let args_flag = format!(
-                    "--args=asus_wmi.fnlock_default={}",
-                    if locked { "0" } else { "1" }
-                );
+                let script = build_grub_script(locked);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
-                            let result = run_command_blocking(
-                                "pkexec",
-                                &[
-                                    "grubby",
-                                    "--update-kernel=ALL",
-                                    "--remove-args=asus_wmi.fnlock_default",
-                                    &args_flag,
-                                ],
-                            )
-                            .await;
-                            match result {
+                            match run_command_blocking("pkexec", &["bash", "-c", &script]).await {
                                 Ok(()) => out.emit(FnKeyCommandOutput::Set(locked)),
                                 Err(e) => out.emit(FnKeyCommandOutput::Error(e)),
                             }
@@ -184,26 +186,11 @@ impl Component for FnKeyModel {
                 }
                 self.locked = locked;
 
-                let args_flag = format!(
-                    "--args=asus_wmi.fnlock_default={}",
-                    if locked { "0" } else { "1" }
-                );
-
+                let script = build_grub_script(locked);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
-                            let result = run_command_blocking(
-                                "pkexec",
-                                &[
-                                    "grubby",
-                                    "--update-kernel=ALL",
-                                    "--remove-args=asus_wmi.fnlock_default",
-                                    &args_flag,
-                                ],
-                            )
-                            .await;
-
-                            match result {
+                            match run_command_blocking("pkexec", &["bash", "-c", &script]).await {
                                 Ok(()) => out.emit(FnKeyCommandOutput::Set(locked)),
                                 Err(e) => out.emit(FnKeyCommandOutput::Error(e)),
                             }
@@ -221,8 +208,8 @@ impl Component for FnKeyModel {
         _root: &Self::Root,
     ) {
         match msg {
-            FnKeyCommandOutput::GrubbyChecked(ok) => {
-                self.grubby_available = ok;
+            FnKeyCommandOutput::UpdateGrubChecked(ok) => {
+                self.update_grub_available = ok;
                 self.row_locked.set_sensitive(ok);
                 self.row_normal.set_sensitive(ok);
             }

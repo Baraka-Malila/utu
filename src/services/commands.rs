@@ -194,3 +194,10 @@ pub(crate) fn is_gnome_desktop() -> bool {
 pub(crate) fn is_cosmic_desktop() -> bool {
     desktop_is("COSMIC")
 }
+
+/// Invokes a D-Bus method via the `qdbus` command-line tool (KDE touchpad toggle).
+pub(crate) async fn run_qdbus(args: Vec<String>) -> Result<(), String> {
+    let cmd = resolve_qdbus_path();
+    let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_command_blocking(cmd, &args_ref).await
+}

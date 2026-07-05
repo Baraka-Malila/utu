@@ -152,7 +152,7 @@ fn_key_mode_locked: "bloqueado"
 fn_key_mode_normal: "normal"
 fn_key_saved: "Tecla Fn definida como %{mode} - requer reinicialização."
 fn_key_save_error: "Erro ao salvar: %{error}"
-fn_key_grubby_missing_warning: "A ferramenta 'grubby' não está instalada. A modificação automática de parâmetros do kernel é atualmente suportada apenas em distribuições Fedora/RHEL."
+fn_key_update_grub_missing_warning: "A ferramenta 'update-grub' não está disponível. A modificação de parâmetros do kernel requer um sistema baseado em GRUB."
 
 # asus_key_hint
 asus_key_hint_group_title: "Atalho"

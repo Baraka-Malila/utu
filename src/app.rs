@@ -1,5 +1,5 @@
-// Ayuz - Unofficial Control Center for Asus Laptops
-// Copyright (C) 2026 Guido Philipp
+// Utu — ASUS Laptop Control for Ubuntu (fork of Ayuz by Guido Philipp)
+// Copyright (C) 2026 Baraka Malila
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,16 +18,10 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use crate::components::audio::{SoundModesModel, SoundModesMsg, VolumeModel};
-use crate::components::display::ColorGamutModel;
-use crate::components::display::OledCareModel;
 use crate::components::display::OledDimmingModel;
-use crate::components::display::TargetModeModel;
 use crate::components::home::{HomeModel, HomeOutput};
 use crate::components::audio::volume::VolumeMsg;
-use crate::components::display::color_gamut::ColorGamutMsg;
-use crate::components::display::oled_care::OledCareMsg;
 use crate::components::display::oled_dimming::OledDimmingMsg;
-use crate::components::display::target_mode::TargetModeMsg;
 use crate::components::keyboard::auto_backlight::AutoBacklightMsg;
 use crate::components::keyboard::auto_backlight::AutoBacklightOutput;
 use crate::components::keyboard::backlight_idle::BacklightIdleMsg;
@@ -134,9 +128,6 @@ pub struct AppModel {
     fan: Controller<FanModel>,
     gpu: Controller<GpuModel>,
     oled_dimming: Controller<OledDimmingModel>,
-    target_mode: Controller<TargetModeModel>,
-    oled_care: Controller<OledCareModel>,
-    color_gamut: Controller<ColorGamutModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
     fn_key: Controller<FnKeyModel>,
@@ -159,13 +150,6 @@ impl AppModel {
         // Display
         self.fan.sender().emit(FanMsg::LoadProfile(FanProfile::from(p.fan_profile)));
         self.oled_dimming.sender().emit(OledDimmingMsg::LoadProfile(p.oled_dc_dimming));
-        self.target_mode.sender().emit(TargetModeMsg::LoadProfile(p.target_mode_active));
-        self.color_gamut.sender().emit(ColorGamutMsg::LoadProfile(p.color_profile_index));
-        self.oled_care.sender().emit(OledCareMsg::LoadProfile {
-            pixel_refresh: p.oled_care_pixel_refresh,
-            panel_autohide: p.oled_care_panel_autohide,
-            transparency: p.oled_care_transparency,
-        });
 
         // Audio
         self.sound_modes.sender().emit(SoundModesMsg::LoadProfile(p.audio_profile));
@@ -340,9 +324,6 @@ impl SimpleComponent for AppModel {
         let fan = launch_component!(FanModel, sender);
         let gpu = launch_component!(GpuModel, sender);
         let oled_dimming = launch_component!(OledDimmingModel, sender);
-        let target_mode = launch_component!(TargetModeModel, sender);
-        let oled_care = launch_component!(OledCareModel, sender);
-        let color_gamut = launch_component!(ColorGamutModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
         let fn_key = launch_component!(FnKeyModel, sender);
@@ -425,9 +406,6 @@ impl SimpleComponent for AppModel {
             fan,
             gpu,
             oled_dimming,
-            target_mode,
-            oled_care,
-            color_gamut,
             aura,
             animatrix,
             fn_key,
@@ -446,9 +424,6 @@ impl SimpleComponent for AppModel {
         let fan_widget = model.fan.widget();
         let gpu_widget = model.gpu.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
-        let target_mode_widget = model.target_mode.widget();
-        let oled_care_widget = model.oled_care.widget();
-        let color_gamut_widget = model.color_gamut.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
         let fn_key_widget = model.fn_key.widget();
@@ -464,9 +439,6 @@ impl SimpleComponent for AppModel {
 
         let display_page = adw::PreferencesPage::new();
         display_page.add(oled_dimming_widget);
-        display_page.add(target_mode_widget);
-        display_page.add(oled_care_widget);
-        display_page.add(color_gamut_widget);
 
         // Aura page hosts a Box of dynamic per-device PreferencesGroups
         // (built by AuraPageModel). PreferencesPage can't host non-PreferencesGroup
@@ -530,18 +502,6 @@ impl SimpleComponent for AppModel {
             (
                 "oled_dimming",
                 oled_dimming_widget.clone().upcast::<gtk4::Widget>(),
-            ),
-            (
-                "target_mode",
-                target_mode_widget.clone().upcast::<gtk4::Widget>(),
-            ),
-            (
-                "oled_care",
-                oled_care_widget.clone().upcast::<gtk4::Widget>(),
-            ),
-            (
-                "color_gamut",
-                color_gamut_widget.clone().upcast::<gtk4::Widget>(),
             ),
             ("aura", aura_widget.clone().upcast::<gtk4::Widget>()),
             ("animatrix", animatrix_widget.clone().upcast::<gtk4::Widget>()),
@@ -695,12 +655,12 @@ impl SimpleComponent for AppModel {
             }
             github_btn.connect_clicked(|_| {
                 let _ = Command::new("xdg-open")
-                    .arg("https://github.com/Traciges")
+                    .arg("https://github.com/Baraka-Malila/utu")
                     .process_group(0)
                     .spawn();
             });
 
-            let made_by_label = gtk4::Label::new(Some("Made by Guido"));
+            let made_by_label = gtk4::Label::new(Some("Baraka Malila"));
             made_by_label.add_css_class("dim-label");
             made_by_label.set_margin_start(6);
             made_by_label.set_valign(gtk4::Align::Center);
