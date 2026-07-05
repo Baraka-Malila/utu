@@ -200,10 +200,7 @@ async fn start_brightness_listener(out: relm4::Sender<OledDimmingCommandOutput>)
         Ok(p) => p,
         Err(_) => return,
     };
-    let mut stream = match proxy.receive_brightness_changed().await {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+    let mut stream = proxy.receive_brightness_changed().await;
     while stream.next().await.is_some() {
         out.emit(OledDimmingCommandOutput::BrightnessChanged);
     }

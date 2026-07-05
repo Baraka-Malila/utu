@@ -580,8 +580,6 @@ impl SimpleComponent for AppModel {
         home_scroll.set_vexpand(true);
 
         let content_stack = adw::ViewStack::new();
-        content_stack.set_transition_duration(250);
-        content_stack.set_enable_transitions(true);
         content_stack.add_named(&home_scroll, Some(AppPage::Home.as_str()));
         content_stack.add_named(&display_page, Some(AppPage::Display.as_str()));
         content_stack.add_named(&keyboard_page, Some(AppPage::Keyboard.as_str()));

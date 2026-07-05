@@ -245,8 +245,8 @@ impl Component for GpuModel {
                     t!("gpu_mode_set", mode = t!(mode.i18n_key()).to_string())
                 );
                 let dialog = adw::AlertDialog::builder()
-                    .heading(&t!("gpu_restart_title"))
-                    .body(&t!("gpu_restart_body"))
+                    .heading(&*t!("gpu_restart_title"))
+                    .body(&*t!("gpu_restart_body"))
                     .build();
                 dialog.add_response("later", &t!("gpu_restart_later"));
                 dialog.add_response("now", &t!("gpu_restart_now"));
