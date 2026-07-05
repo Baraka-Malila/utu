@@ -43,13 +43,14 @@ pub fn find_touchpad() -> Option<Device> {
         if !name.contains("touchpad") {
             continue;
         }
-        if let Some(axes) = device.supported_absolute_axes()
-            && (axes.contains(AbsoluteAxisCode::ABS_X)
-                || axes.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
-            && (axes.contains(AbsoluteAxisCode::ABS_Y)
-                || axes.contains(AbsoluteAxisCode::ABS_MT_POSITION_Y))
-        {
-            return Some(device);
+        if let Some(axes) = device.supported_absolute_axes() {
+            if (axes.contains(AbsoluteAxisCode::ABS_X)
+                    || axes.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
+                && (axes.contains(AbsoluteAxisCode::ABS_Y)
+                    || axes.contains(AbsoluteAxisCode::ABS_MT_POSITION_Y))
+            {
+                return Some(device);
+            }
         }
     }
     None

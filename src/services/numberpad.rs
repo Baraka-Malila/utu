@@ -304,10 +304,10 @@ fn cell_for(x: i32, y: i32, x_max: i32, y_max: i32, layout: &Layout) -> Option<u
 /// LED state, and a wrong `false` here would flip the user's NumLock to OFF.
 fn is_numlock_on() -> bool {
     for (_, dev) in evdev::enumerate() {
-        if let Ok(leds) = dev.get_led_state()
-            && leds.contains(evdev::LedCode::LED_NUML)
-        {
-            return true;
+        if let Ok(leds) = dev.get_led_state() {
+            if leds.contains(evdev::LedCode::LED_NUML) {
+                return true;
+            }
         }
     }
     false
@@ -430,11 +430,12 @@ pub async fn run_loop(
                         hold = HoldTimer::Idle;
                         if active {
                             let release_cell = cell_for(cur_x, cur_y, x_max, y_max, layout);
-                            if let (Some(p), Some(r)) = (press_cell, release_cell)
-                                && p == r
-                                && let Some(cell) = layout.cells[p]
-                            {
-                                emit_tap(&mut virt, cell.keys);
+                            if let (Some(p), Some(r)) = (press_cell, release_cell) {
+                                if p == r {
+                                    if let Some(cell) = layout.cells[p] {
+                                        emit_tap(&mut virt, cell.keys);
+                                    }
+                                }
                             }
                         }
                         press_cell = None;
