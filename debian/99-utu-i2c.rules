@@ -1,0 +1,4 @@
+# utu: grant the i2c group read/write access to all i2c-dev nodes.
+# Required for NumberPad LED control (ASUS touchpad I2C slave).
+# Add your user to the i2c group: sudo usermod -aG i2c $USER  (re-login required)
+SUBSYSTEM=="i2c-dev", GROUP="i2c", MODE="0660"
