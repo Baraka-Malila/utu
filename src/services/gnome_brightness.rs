@@ -5,7 +5,7 @@
 /// Replaces the KDE PowerDevil proxy from the upstream Ayuz project.
 #[zbus::proxy(
     interface = "org.gnome.SettingsDaemon.Power.Screen",
-    default_service = "org.gnome.SettingsDaemon",
+    default_service = "org.gnome.SettingsDaemon.Power",
     default_path = "/org/gnome/SettingsDaemon/Power"
 )]
 pub trait GnomeBrightnessControl {
