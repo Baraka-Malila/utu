@@ -117,15 +117,10 @@ impl Component for AutoBacklightModel {
 
     view! {
         adw::PreferencesGroup {
+            #[watch]
+            set_visible: model.sensor_available,
             set_title: &t!("backlight_group_title"),
             set_description: Some(&t!("backlight_group_desc")),
-
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
-                #[watch]
-                set_visible: !model.sensor_available,
-                set_label: &t!("backlight_sensor_missing_warning"),
-            },
 
             add = &adw::ActionRow {
                 set_title: &t!("backlight_light_level_title"),
