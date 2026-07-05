@@ -1,6 +1,6 @@
 [package]
 name = "utu"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/Baraka-Malila/utu"
@@ -11,7 +11,6 @@ authors = ["Guido Philipp", "Baraka Malila"]
 relm4 = { version = "0.10", features = ["libadwaita"] }
 libadwaita = { version = "0.8", features = ["v1_5"] }
 gtk4 = { version = "0.10", features = ["v4_14"] }
-gtk4-layer-shell = "0.6"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process"] }
 serde = { version = "1", features = ["derive"] }

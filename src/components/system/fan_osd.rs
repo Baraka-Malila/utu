@@ -20,7 +20,6 @@ use std::time::Duration;
 use gtk4 as gtk;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use rust_i18n::t;
 
 use crate::services::commands::is_cosmic_desktop;
@@ -49,15 +48,6 @@ fn build() -> OsdState {
     window.set_decorated(false);
     window.set_resizable(false);
     window.add_css_class("fan-osd");
-
-    if gtk4_layer_shell::is_supported() {
-        window.init_layer_shell();
-        window.set_layer(Layer::Overlay);
-        window.set_namespace(Some("utu-osd"));
-        window.set_anchor(Edge::Bottom, true);
-        window.set_margin(Edge::Bottom, 80);
-        window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
-    }
 
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     hbox.set_margin_top(16);
