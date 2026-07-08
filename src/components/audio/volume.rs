@@ -69,6 +69,7 @@ impl SimpleComponent for VolumeModel {
                 add_suffix = &gtk::Scale {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_range: (0.0, 150.0),
+                    add_mark: (100.0, gtk::PositionType::Bottom, None::<&str>),
                     #[watch]
                     #[block_signal(vol_handler)]
                     set_value: model.volume,

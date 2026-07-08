@@ -16,8 +16,8 @@
 
 //! Reusable `relm4` widget templates shared across components.
 
-use gtk::prelude::*;
 use relm4::gtk;
+use gtk::prelude::*;
 
 /// Inline warning label used by every component that surfaces a "daemon
 /// missing / requirement unmet" hint inside an `adw::PreferencesGroup`.
@@ -34,6 +34,21 @@ use relm4::gtk;
 ///     set_label: &t!("asusd_missing_warning"),
 /// },
 /// ```
+/// Returns a `> > > > LABEL` horizontal header box styled with the design system
+/// CSS classes. Use between page sections in a vertical layout.
+pub fn section_divider(label: &str) -> gtk::Box {
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.set_margin_top(20);
+    row.set_margin_bottom(4);
+    let chevrons = gtk::Label::new(Some("> > > >"));
+    chevrons.add_css_class("section-divider-chevrons");
+    let lbl = gtk::Label::new(Some(label));
+    lbl.add_css_class("section-divider-label");
+    row.append(&chevrons);
+    row.append(&lbl);
+    row
+}
+
 #[relm4::widget_template(pub)]
 impl relm4::WidgetTemplate for DaemonWarningLabel {
     view! {

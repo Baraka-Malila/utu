@@ -35,6 +35,9 @@ use crate::components::system::fan::FanMsg;
 use crate::components::system::gpu::GpuMsg;
 use crate::services::dbus::FanProfile;
 use crate::components::animatrix::{AnimatrixModel, AnimatrixMsg};
+use crate::components::about::AboutModel;
+use crate::components::hardware::HardwareModel;
+use crate::components::AppearanceModel;
 use crate::components::aura::AuraPageModel;
 use crate::components::aura::AuraPageMsg;
 use crate::components::keyboard::AutoBacklightModel;
@@ -47,13 +50,17 @@ use crate::components::system::apu_mem::ApuMemModel;
 use crate::components::system::battery::BatteryModel;
 use crate::components::system::fan::FanModel;
 use crate::components::system::gpu::GpuModel;
-use crate::search::sorted_nav_items;
+use crate::components::system::ThermalProfileModel;
+use crate::components::system::thermal_profile::ThermalProfileMsg;
+use crate::components::system::ChargeLimit;
+use crate::components::system::BatteryHealth;
+use crate::components::widgets::section_divider;
+use crate::search::nav_items;
 use crate::tray;
 use relm4::adw;
 use relm4::adw::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
-use std::rc::Rc;
 
 /// Builds a Linux *abstract* (per-user-namespace) Unix socket address with the
 /// given name. Returns None on non-Linux platforms where abstract sockets
@@ -73,31 +80,39 @@ macro_rules! launch_component {
     };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum AppPage {
     Home,
+    System,
+    Battery,
     Display,
     Keyboard,
-    Aura,
-    Animatrix,
     Touchpad,
+    Lighting,
     Audio,
-    System,
+    Animatrix,
+    Appearance,
+    About,
+    Hardware,
     Search,
 }
 
 impl AppPage {
     fn as_str(self) -> &'static str {
         match self {
-            AppPage::Home => "home",
-            AppPage::Display => "display",
-            AppPage::Keyboard => "keyboard",
-            AppPage::Aura => "aura",
-            AppPage::Animatrix => "animatrix",
-            AppPage::Touchpad => "touchpad",
-            AppPage::Audio => "audio",
-            AppPage::System => "system",
-            AppPage::Search => "search",
+            AppPage::Home       => "home",
+            AppPage::System     => "system",
+            AppPage::Battery    => "battery",
+            AppPage::Display    => "display",
+            AppPage::Keyboard   => "keyboard",
+            AppPage::Touchpad   => "touchpad",
+            AppPage::Lighting   => "lighting",
+            AppPage::Audio      => "audio",
+            AppPage::Animatrix  => "animatrix",
+            AppPage::Appearance => "appearance",
+            AppPage::About      => "about",
+            AppPage::Hardware   => "hardware",
+            AppPage::Search     => "search",
         }
     }
 }
@@ -110,6 +125,7 @@ pub enum AppMsg {
     SetLanguage(String),
     ToggleAutostart(bool),
     ActivateProfile(String),
+    NavigateToHardware,
     LegacyMigrationAccepted,
     LegacyMigrationDeclined,
     TriggerManualMigration,
@@ -121,13 +137,20 @@ pub struct AppModel {
     start_hidden: bool,
     window: gtk4::glib::WeakRef<adw::ApplicationWindow>,
     toast_overlay: adw::ToastOverlay,
+    sidebar_list: gtk4::ListBox,
     _tray: ksni::Handle<tray::UtuTray>,
     home: Controller<HomeModel>,
     apu_mem: Controller<ApuMemModel>,
     battery: Controller<BatteryModel>,
+    charge_limit: Controller<ChargeLimit>,
+    battery_health: Controller<BatteryHealth>,
     fan: Controller<FanModel>,
     gpu: Controller<GpuModel>,
+    thermal_profile: Controller<ThermalProfileModel>,
     oled_dimming: Controller<OledDimmingModel>,
+    appearance: Controller<AppearanceModel>,
+    about: Controller<AboutModel>,
+    hardware: Controller<HardwareModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
     fn_key: Controller<FnKeyModel>,
@@ -162,11 +185,9 @@ impl AppModel {
             brighten_threshold: p.kbd_brighten_threshold,
             dim_threshold: p.kbd_dim_threshold,
         });
-        self.backlight_idle.sender().emit(BacklightIdleMsg::LoadProfile {
-            mode: p.kbd_timeout_mode,
-            ac_index: p.kbd_timeout_battery_ac_index,
-            battery_index: p.kbd_timeout_battery_only_index,
-        });
+        self.backlight_idle
+            .sender()
+            .emit(BacklightIdleMsg::LoadProfile(p.kbd_timeout_mode));
         self.aura.sender().emit(AuraPageMsg::LoadProfile {
             mode: p.aura_mode,
             zone: p.aura_zone,
@@ -201,6 +222,7 @@ impl AppModel {
         self.battery.sender().emit(BatteryMsg::LoadProfile(p.battery_deep_sleep_active));
         self.gpu.sender().emit(GpuMsg::LoadProfile(p.gpu_mode));
         self.apu_mem.sender().emit(ApuMemMsg::LoadProfile(p.apu_mem));
+        self.thermal_profile.sender().emit(ThermalProfileMsg::LoadProfile(FanProfile::from(p.fan_profile)));
     }
 }
 
@@ -262,6 +284,16 @@ impl SimpleComponent for AppModel {
                 let config = crate::services::config::AppConfig::load();
                 self.distribute_profile(config.active_profile());
             }
+            AppMsg::NavigateToHardware => {
+                let nav = nav_items();
+                if let Some(idx) =
+                    nav.iter().position(|(_, _, page)| *page == AppPage::Hardware.as_str())
+                {
+                    if let Some(row) = self.sidebar_list.row_at_index(idx as i32) {
+                        self.sidebar_list.select_row(Some(&row));
+                    }
+                }
+            }
             AppMsg::LegacyMigrationAccepted => {
                 match crate::services::migration::perform_migration() {
                     Ok(()) => {}
@@ -317,13 +349,19 @@ impl SimpleComponent for AppModel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 HomeOutput::Error(e) => AppMsg::Error(e),
-                HomeOutput::ActivateProfile(id) => AppMsg::ActivateProfile(id),
+                HomeOutput::NavigateToHardware => AppMsg::NavigateToHardware,
             });
         let apu_mem = launch_component!(ApuMemModel, sender);
         let battery = launch_component!(BatteryModel, sender);
+        let charge_limit = launch_component!(ChargeLimit, sender);
+        let battery_health = launch_component!(BatteryHealth, sender);
         let fan = launch_component!(FanModel, sender);
         let gpu = launch_component!(GpuModel, sender);
+        let thermal_profile = launch_component!(ThermalProfileModel, sender);
         let oled_dimming = launch_component!(OledDimmingModel, sender);
+        let appearance = launch_component!(AppearanceModel, sender);
+        let about = launch_component!(AboutModel, sender);
+        let hardware = launch_component!(HardwareModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
         let fn_key = launch_component!(FnKeyModel, sender);
@@ -394,18 +432,26 @@ impl SimpleComponent for AppModel {
         });
 
         let toast_overlay = adw::ToastOverlay::new();
+        let sidebar_list_early = gtk4::ListBox::new();
 
         let model = AppModel {
             start_hidden: init,
             window: root.downgrade(),
             toast_overlay,
+            sidebar_list: sidebar_list_early.clone(),
             _tray: tray_handle,
             home,
             apu_mem,
             battery,
+            charge_limit,
+            battery_health,
             fan,
             gpu,
+            thermal_profile,
             oled_dimming,
+            appearance,
+            about,
+            hardware,
             aura,
             animatrix,
             fn_key,
@@ -421,9 +467,16 @@ impl SimpleComponent for AppModel {
         let home_widget = model.home.widget();
         let apu_mem_widget = model.apu_mem.widget();
         let battery_widget = model.battery.widget();
-        let fan_widget = model.fan.widget();
         let gpu_widget = model.gpu.widget();
+        let thermal_profile_widget = model.thermal_profile.widget();
+        let charge_limit_widget = model.charge_limit.widget();
+        let battery_health_widget = model.battery_health.widget();
+        // fan_widget is not placed on any page — FanModel runs for hotkey-only.
+        let _fan_widget = model.fan.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
+        let appearance_widget = model.appearance.widget();
+        let about_widget = model.about.widget();
+        let hardware_widget = model.hardware.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
         let fn_key_widget = model.fn_key.widget();
@@ -471,9 +524,6 @@ impl SimpleComponent for AppModel {
         keyboard_page.add(backlight_idle_widget);
         keyboard_page.add(fn_key_widget);
 
-        let asus_key_hint_group = build_asus_key_hint_group(fan_hotkey_tx);
-        keyboard_page.add(&asus_key_hint_group);
-
         let touchpad_page = adw::PreferencesPage::new();
         touchpad_page.add(touchpad_widget);
         touchpad_page.add(numberpad_widget);
@@ -483,17 +533,40 @@ impl SimpleComponent for AppModel {
         audio_page.add(volume_widget);
         audio_page.add(sound_modes_widget);
 
-        let system_page = adw::PreferencesPage::new();
-        system_page.add(battery_widget);
-        system_page.add(fan_widget);
-        system_page.add(gpu_widget);
-        system_page.add(apu_mem_widget);
-
+        // System page — ScrolledWindow+Box for full layout control (mode cards
+        // and pill strips can't be children of adw::PreferencesPage directly).
+        let asus_key_hint_group = build_asus_key_hint_group(fan_hotkey_tx);
         let lang_group = build_language_and_autostart_group(&sender);
-        system_page.add(&lang_group);
-
         let legacy_group = build_legacy_migration_group(&sender);
-        system_page.add(&legacy_group);
+
+        let system_inner = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(12)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+        system_inner.append(&section_divider(&t!("thermal_profile_group_title")));
+        system_inner.append(thermal_profile_widget);
+        system_inner.append(&section_divider(&t!("gpu_group_title")));
+        system_inner.append(gpu_widget);
+        system_inner.append(&section_divider(&t!("apu_mem_group_title")));
+        system_inner.append(apu_mem_widget);
+        system_inner.append(&asus_key_hint_group);
+        system_inner.append(&lang_group);
+        system_inner.append(&legacy_group);
+
+        let system_clamp = adw::Clamp::builder()
+            .maximum_size(600)
+            .tightening_threshold(400)
+            .child(&system_inner)
+            .build();
+        let system_page = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vexpand(true)
+            .child(&system_clamp)
+            .build();
 
         // Widget map for scroll-to-widget
 
@@ -524,7 +597,6 @@ impl SimpleComponent for AppModel {
             ),
             ("apu_mem", apu_mem_widget.clone().upcast::<gtk4::Widget>()),
             ("battery", battery_widget.clone().upcast::<gtk4::Widget>()),
-            ("fan", fan_widget.clone().upcast::<gtk4::Widget>()),
             (
                 "asus_key_hint",
                 asus_key_hint_group.clone().upcast::<gtk4::Widget>(),
@@ -543,11 +615,22 @@ impl SimpleComponent for AppModel {
         content_stack.add_named(&home_scroll, Some(AppPage::Home.as_str()));
         content_stack.add_named(&display_page, Some(AppPage::Display.as_str()));
         content_stack.add_named(&keyboard_page, Some(AppPage::Keyboard.as_str()));
-        content_stack.add_named(&aura_page, Some(AppPage::Aura.as_str()));
+        content_stack.add_named(&aura_page, Some(AppPage::Lighting.as_str()));
         content_stack.add_named(&animatrix_page, Some(AppPage::Animatrix.as_str()));
         content_stack.add_named(&touchpad_page, Some(AppPage::Touchpad.as_str()));
         content_stack.add_named(&audio_page, Some(AppPage::Audio.as_str()));
         content_stack.add_named(&system_page, Some(AppPage::System.as_str()));
+
+        // Battery page
+        let battery_page = adw::PreferencesPage::new();
+        battery_page.add(charge_limit_widget);
+        battery_page.add(battery_widget);
+        battery_page.add(battery_health_widget);
+        content_stack.add_named(&battery_page, Some(AppPage::Battery.as_str()));
+        content_stack.add_named(appearance_widget, Some(AppPage::Appearance.as_str()));
+        content_stack.add_named(about_widget, Some(AppPage::About.as_str()));
+        content_stack.add_named(hardware_widget, Some(AppPage::Hardware.as_str()));
+
         content_stack.set_visible_child_name(AppPage::Home.as_str());
 
         let content_header = adw::HeaderBar::new();
@@ -558,25 +641,33 @@ impl SimpleComponent for AppModel {
 
         // Sidebar
 
-        let sidebar_list = gtk4::ListBox::new();
+        let sidebar_list = sidebar_list_early;
         sidebar_list.add_css_class("navigation-sidebar");
         sidebar_list.set_selection_mode(gtk4::SelectionMode::Single);
 
-        let sorted_nav = Rc::new(sorted_nav_items());
+        let nav = nav_items();
 
+        // Group label injected as row header at these indices:
+        // 1=CONTROL, 3=DISPLAY & INPUT, 6=FEATURES, 9=SETTINGS
         sidebar_list.set_header_func(|row, _before| {
-            if row.index() == 1 {
-                let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-                sep.set_margin_top(4);
-                sep.set_margin_bottom(4);
-                sep.add_css_class("nav-separator");
-                row.set_header(Some(&sep));
+            let label_key = match row.index() {
+                1 => Some(t!("nav_group_control")),
+                3 => Some(t!("nav_group_display_input")),
+                6 => Some(t!("nav_group_features")),
+                9 => Some(t!("nav_group_settings")),
+                _ => None,
+            };
+            if let Some(text) = label_key {
+                let lbl = gtk4::Label::new(Some(text.as_ref()));
+                lbl.set_halign(gtk4::Align::Start);
+                lbl.add_css_class("nav-group-label");
+                row.set_header(Some(&lbl));
             } else {
                 row.set_header(None::<&gtk4::Widget>);
             }
         });
 
-        for (icon_name, title_key, _page_name) in sorted_nav.iter() {
+        for (icon_name, title_key, _page_name) in nav.iter() {
             let row = gtk4::ListBoxRow::new();
             let hbox = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
             hbox.set_margin_top(10);
@@ -595,11 +686,10 @@ impl SimpleComponent for AppModel {
 
         let stack_c = content_stack.clone();
         let nav_page_c = content_nav_page.clone();
-        let sorted_nav_c = sorted_nav.clone();
         sidebar_list.connect_row_selected(move |_, row| {
             if let Some(row) = row {
                 let idx = row.index() as usize;
-                if let Some(&(_, title_key, page_name)) = sorted_nav_c.get(idx) {
+                if let Some(&(_, title_key, page_name)) = nav.get(idx) {
                     stack_c.set_visible_child_name(page_name);
                     nav_page_c.set_title(&t!(title_key));
                 }
@@ -613,7 +703,7 @@ impl SimpleComponent for AppModel {
         // Search
 
         let search_widgets = crate::search::setup(
-            (*sorted_nav).clone(),
+            nav_items().to_vec(),
             &content_stack,
             &content_nav_page,
             &sidebar_list,
@@ -634,51 +724,6 @@ impl SimpleComponent for AppModel {
         sidebar_toolbar.add_top_bar(&sidebar_header);
         sidebar_toolbar.add_top_bar(&search_widgets.bar);
         sidebar_toolbar.set_content(Some(&sidebar_list));
-
-        // Bottom bar: GitHub + "Made by Guido" + version
-        {
-            let bottom_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            bottom_box.set_margin_top(6);
-            bottom_box.set_margin_bottom(6);
-            bottom_box.set_margin_start(10);
-            bottom_box.set_margin_end(10);
-
-            let github_btn = gtk4::Button::new();
-            github_btn.add_css_class("flat");
-            github_btn.set_tooltip_text(Some("GitHub"));
-            let svg_bytes = include_bytes!("../assets/img/github.svg");
-            let glib_bytes = gtk4::glib::Bytes::from_static(svg_bytes);
-            if let Ok(texture) = gtk4::gdk::Texture::from_bytes(&glib_bytes) {
-                let gh_icon = gtk4::Image::from_paintable(Some(&texture));
-                gh_icon.set_pixel_size(16);
-                github_btn.set_child(Some(&gh_icon));
-            }
-            github_btn.connect_clicked(|_| {
-                let _ = Command::new("xdg-open")
-                    .arg("https://github.com/Baraka-Malila/utu")
-                    .process_group(0)
-                    .spawn();
-            });
-
-            let made_by_label = gtk4::Label::new(Some("Baraka Malila"));
-            made_by_label.add_css_class("dim-label");
-            made_by_label.set_margin_start(6);
-            made_by_label.set_valign(gtk4::Align::Center);
-
-            let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            spacer.set_hexpand(true);
-
-            let version_label = gtk4::Label::new(Some(concat!("v", env!("CARGO_PKG_VERSION"))));
-            version_label.add_css_class("dim-label");
-            version_label.set_valign(gtk4::Align::Center);
-
-            bottom_box.append(&github_btn);
-            bottom_box.append(&made_by_label);
-            bottom_box.append(&spacer);
-            bottom_box.append(&version_label);
-
-            sidebar_toolbar.add_bottom_bar(&bottom_box);
-        }
 
         let sidebar_nav_page = adw::NavigationPage::new(&sidebar_toolbar, &t!("app_title"));
 

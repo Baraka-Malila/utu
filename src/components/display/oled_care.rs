@@ -30,6 +30,7 @@ pub struct OledCareModel {
     transparency_active: bool,
     kde_available: bool,
     panel_ctrl_available: bool,
+    on_gnome: bool,
 }
 
 #[derive(Debug)]
@@ -64,11 +65,10 @@ impl Component for OledCareModel {
             set_title: &t!("oled_care_group_title"),
             set_description: Some(&t!("oled_care_group_desc")),
 
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
+            add = &adw::Banner {
+                set_title: &t!("display_gnome_banner"),
                 #[watch]
-                set_visible: !model.panel_ctrl_available,
-                set_label: &t!("kde_required_warning"),
+                set_revealed: model.on_gnome,
             },
 
             #[template]
@@ -129,12 +129,14 @@ impl Component for OledCareModel {
         let p = config.active_profile();
         let kde = is_kde_desktop();
         let cosmic = is_cosmic_desktop();
+        let panel_ctrl = kde || cosmic;
         let model = OledCareModel {
             pixel_refresh_active: p.oled_care_pixel_refresh,
             panel_autohide_active: p.oled_care_panel_autohide,
             transparency_active: p.oled_care_transparency,
             kde_available: kde,
-            panel_ctrl_available: kde || cosmic,
+            panel_ctrl_available: panel_ctrl,
+            on_gnome: !panel_ctrl,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }

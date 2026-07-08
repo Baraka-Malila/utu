@@ -1,5 +1,5 @@
-// Ayuz - Unofficial Control Center for Asus Laptops
-// Copyright (C) 2026 Guido Philipp
+// Utu - ASUS Laptop Control Centre for Ubuntu
+// Copyright (C) 2026 Guido Philipp, Baraka Malila
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 // along with this program.  If not, see https://www.gnu.org/licenses/.
 
 use gtk4 as gtk;
+use gtk4::prelude::*;
 use relm4::adw;
 use relm4::adw::prelude::*;
 use relm4::prelude::*;
@@ -24,38 +25,80 @@ use crate::services::config::AppConfig;
 use crate::services::dbus;
 use crate::services::dbus::GfxMode;
 
-/// State for the GPU mode settings component.
 pub struct GpuModel {
-    /// Whether the `supergfxctl` daemon is reachable; disables controls when `false`.
     supergfxctl_available: bool,
-    /// The currently active GPU mode, used to suppress no-op callback invocations.
     current_mode: GfxMode,
-    /// Combined, deduplicated list of modes to display: active mode prepended to supported modes.
     display_modes: Vec<GfxMode>,
-    /// Stored reference so `update_cmd` can imperatively update the model and selection.
-    combo_row: adw::ComboRow,
 }
 
-/// Input messages for the GPU mode component.
 #[derive(Debug)]
 pub enum GpuMsg {
-    /// User selected index `idx` in the mode dropdown.
-    ChangeMode(u32),
-    /// Apply GPU mode from a profile without saving.
+    ChangeMode(GfxMode),
     LoadProfile(u32),
 }
 
-/// Async command results for the GPU mode component.
 #[derive(Debug)]
 pub enum GpuCommandOutput {
-    /// Result of the initial `supergfxctl` availability check.
     SupergfxctlChecked(bool),
-    /// Current mode and the list of modes available for switching, read at startup.
     InitModeAndSupported(GfxMode, Vec<GfxMode>),
-    /// Confirmation that `SetMode` succeeded; carries the daemon-confirmed new mode.
     ModeSet(GfxMode),
-    /// An error message to forward as a toast notification.
     Error(String),
+}
+
+// Static metadata for the three modes we surface in the UI.
+// NvidiaNoModeset is labeled "Dedicated" — it's the closest to a discrete-only mode.
+const MODE_META: &[(GfxMode, &str, &str, &str)] = &[
+    (GfxMode::Integrated,      "computer-symbolic",     "Integrated", "iGPU only · Best battery"),
+    (GfxMode::Hybrid,          "view-refresh-symbolic", "Hybrid",     "Auto-switch · Balanced"),
+    (GfxMode::NvidiaNoModeset, "input-gaming-symbolic", "Dedicated",  "dGPU always · Max perf"),
+];
+
+fn gpu_mode_card(
+    icon: &str,
+    name: &str,
+    desc: &str,
+    active: bool,
+    sender: ComponentSender<GpuModel>,
+    mode: GfxMode,
+) -> gtk::Button {
+    let icon_w = gtk::Image::from_icon_name(icon);
+    icon_w.set_pixel_size(32);
+
+    let name_l = gtk::Label::new(Some(name));
+    name_l.add_css_class("body");
+    name_l.set_halign(gtk::Align::Center);
+
+    let desc_l = gtk::Label::new(Some(desc));
+    desc_l.add_css_class("caption");
+    desc_l.add_css_class("dim-label");
+    desc_l.set_wrap(true);
+    desc_l.set_halign(gtk::Align::Center);
+    desc_l.set_max_width_chars(14);
+
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(8)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(12)
+        .margin_end(12)
+        .halign(gtk::Align::Center)
+        .build();
+    inner.append(&icon_w);
+    inner.append(&name_l);
+    inner.append(&desc_l);
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&inner));
+    btn.add_css_class("flat");
+    btn.add_css_class("mode-card");
+    if active {
+        btn.add_css_class("mode-card-active");
+    }
+    btn.connect_clicked(move |_| {
+        sender.input(GpuMsg::ChangeMode(mode));
+    });
+    btn
 }
 
 #[relm4::component(pub)]
@@ -66,69 +109,28 @@ impl Component for GpuModel {
     type CommandOutput = GpuCommandOutput;
 
     view! {
-        adw::PreferencesGroup {
-            set_title: &t!("gpu_group_title"),
-            set_description: Some(&t!("gpu_group_desc")),
-
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
-                #[watch]
-                set_visible: !model.supergfxctl_available,
-                set_label: &t!("supergfxctl_missing_warning"),
-            },
-
-            add = &model.combo_row.clone() -> adw::ComboRow {
-                set_title: &t!("gpu_mode_title"),
-                set_subtitle: &t!("gpu_mode_subtitle"),
-
-                #[watch]
-                set_sensitive: model.supergfxctl_available,
-            },
-
-            add = &gtk::Label {
-                set_label: &t!("gpu_reboot_warning"),
-                add_css_class: "dim-label",
-                set_wrap: true,
-                set_xalign: 0.0,
-                set_margin_top: 8,
-                set_margin_start: 12,
-                set_margin_end: 12,
-                set_margin_bottom: 4,
-            },
+        gtk::Box {
+            set_orientation: gtk::Orientation::Vertical,
+            set_spacing: 8,
         }
     }
 
     fn init(
         _init: Self::Init,
-        _root: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let combo_row = adw::ComboRow::new();
-
-        combo_row.connect_selected_notify({
-            let sender = sender.clone();
-            move |row| {
-                sender.input(GpuMsg::ChangeMode(row.selected()));
-            }
-        });
-
         let saved_mode = GfxMode::from(AppConfig::load().active_profile().gpu_mode);
-
-        // Set a placeholder model so the ComboRow always renders,
-        // even before the daemon responds or when it is unavailable.
-        combo_row.set_model(Some(&gtk::StringList::new(&[&t!(saved_mode.i18n_key())])));
 
         let model = GpuModel {
             supergfxctl_available: false,
             current_mode: saved_mode,
             display_modes: Vec::new(),
-            combo_row,
         };
 
         let widgets = view_output!();
+        model.rebuild_cards(&root, &sender);
 
-        // Single command: check availability first, then read mode only if reachable.
-        // This prevents spurious error toasts when supergfxctl is not installed.
         sender.command(|out, shutdown| {
             shutdown
                 .register(async move {
@@ -161,7 +163,7 @@ impl Component for GpuModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: GpuMsg, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, msg: GpuMsg, sender: ComponentSender<Self>, root: &Self::Root) {
         match msg {
             GpuMsg::LoadProfile(mode_u32) => {
                 if !self.supergfxctl_available {
@@ -169,9 +171,7 @@ impl Component for GpuModel {
                 }
                 let mode = GfxMode::from(mode_u32);
                 self.current_mode = mode;
-                if let Some(idx) = self.display_modes.iter().position(|&m| m == mode) {
-                    self.combo_row.set_selected(idx as u32);
-                }
+                self.rebuild_cards(root, &sender);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
@@ -183,16 +183,13 @@ impl Component for GpuModel {
                         .drop_on_shutdown()
                 });
             }
-            GpuMsg::ChangeMode(idx) => {
-                let Some(&mode) = self.display_modes.get(idx as usize) else {
-                    return;
-                };
+            GpuMsg::ChangeMode(mode) => {
                 if mode == self.current_mode {
                     return;
                 }
                 self.current_mode = mode;
                 AppConfig::update(|c| c.active_profile_mut().gpu_mode = mode as u32);
-
+                self.rebuild_cards(root, &sender);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
@@ -218,7 +215,6 @@ impl Component for GpuModel {
                 self.supergfxctl_available = available;
             }
             GpuCommandOutput::InitModeAndSupported(current, supported) => {
-                // Build display list: active mode first, then any additional supported modes.
                 let mut modes = vec![current];
                 for m in supported {
                     if !modes.contains(&m) {
@@ -227,17 +223,7 @@ impl Component for GpuModel {
                 }
                 self.display_modes = modes;
                 self.current_mode = current;
-
-                let translated: Vec<String> = self.display_modes.iter().map(|m| t!(m.i18n_key()).to_string()).collect();
-                let str_refs: Vec<&str> = translated.iter().map(|s| s.as_str()).collect();
-                self.combo_row.set_model(Some(&gtk::StringList::new(&str_refs)));
-
-                let selected_idx = self
-                    .display_modes
-                    .iter()
-                    .position(|m| *m == current)
-                    .unwrap_or(0) as u32;
-                self.combo_row.set_selected(selected_idx);
+                self.rebuild_cards(root, &sender);
             }
             GpuCommandOutput::ModeSet(mode) => {
                 tracing::info!(
@@ -260,11 +246,56 @@ impl Component for GpuModel {
                             .spawn();
                     }
                 });
-                dialog.present(Some(root));
+                // Present on the active window — GTK finds it via the default display.
+                dialog.present(None::<&gtk::Widget>);
             }
             GpuCommandOutput::Error(e) => {
                 let _ = sender.output(e);
             }
+        }
+    }
+}
+
+impl GpuModel {
+    fn rebuild_cards(&self, root: &gtk::Box, sender: &ComponentSender<Self>) {
+        while let Some(c) = root.last_child() {
+            root.remove(&c);
+        }
+
+        if !self.supergfxctl_available && self.display_modes.is_empty() {
+            let warning = gtk::Label::new(Some(&t!("supergfxctl_missing_warning")));
+            warning.add_css_class("error");
+            warning.set_wrap(true);
+            warning.set_xalign(0.0);
+            root.append(&warning);
+            return;
+        }
+
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        row.set_homogeneous(true);
+
+        for (mode, icon, name, desc) in MODE_META {
+            // Only show modes that the daemon reports as supported, or current mode.
+            // When display_modes is empty (not yet loaded), show all three.
+            let show = self.display_modes.is_empty()
+                || self.display_modes.contains(mode)
+                || *mode == self.current_mode;
+            if !show {
+                continue;
+            }
+            let active = *mode == self.current_mode;
+            let card = gpu_mode_card(icon, name, desc, active, sender.clone(), *mode);
+            row.append(&card);
+        }
+        root.append(&row);
+
+        if !self.display_modes.is_empty() {
+            let note = gtk::Label::new(Some(&t!("gpu_reboot_warning")));
+            note.add_css_class("dim-label");
+            note.add_css_class("caption");
+            note.set_wrap(true);
+            note.set_xalign(0.0);
+            root.append(&note);
         }
     }
 }

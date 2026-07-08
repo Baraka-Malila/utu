@@ -95,6 +95,7 @@ fn main() {
 
     let a = relm4::RelmApp::new("io.github.baraka_malila.utu").with_args(gtk_args);
     load_css();
+    services::theme::detect_and_apply();
     relm4::adw::StyleManager::default().set_color_scheme(relm4::adw::ColorScheme::PreferDark);
     a.run::<app::AppModel>(start_hidden);
 }

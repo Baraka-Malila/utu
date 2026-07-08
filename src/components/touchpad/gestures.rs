@@ -30,6 +30,7 @@ pub struct GesturesModel {
     loop_tx: Option<watch::Sender<bool>>,
     brightnessctl_available: bool,
     playerctl_available: bool,
+    deps_missing: bool,
 }
 
 #[derive(Debug)]
@@ -58,11 +59,10 @@ impl Component for GesturesModel {
             set_title: &t!("gestures_group_title"),
             set_description: Some(&t!("gestures_group_desc")),
 
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
+            add = &adw::Banner {
+                set_title: &t!("gestures_missing_banner"),
                 #[watch]
-                set_visible: !model.brightnessctl_available || !model.playerctl_available,
-                set_label: &t!("gestures_deps_missing_warning"),
+                set_revealed: model.deps_missing,
             },
 
             add = &gtk::Box {
@@ -129,6 +129,7 @@ impl Component for GesturesModel {
             loop_tx,
             brightnessctl_available: false,
             playerctl_available: false,
+            deps_missing: false,
         };
         let widgets = view_output!();
 
@@ -191,8 +192,14 @@ impl Component for GesturesModel {
         _root: &Self::Root,
     ) {
         match msg {
-            GesturesCommandOutput::BrightnessctlChecked(ok) => self.brightnessctl_available = ok,
-            GesturesCommandOutput::PlayerctlChecked(ok) => self.playerctl_available = ok,
+            GesturesCommandOutput::BrightnessctlChecked(ok) => {
+                self.brightnessctl_available = ok;
+                self.deps_missing = !self.brightnessctl_available || !self.playerctl_available;
+            }
+            GesturesCommandOutput::PlayerctlChecked(ok) => {
+                self.playerctl_available = ok;
+                self.deps_missing = !self.brightnessctl_available || !self.playerctl_available;
+            }
         }
     }
 }
