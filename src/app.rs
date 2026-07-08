@@ -35,6 +35,7 @@ use crate::components::system::fan::FanMsg;
 use crate::components::system::gpu::GpuMsg;
 use crate::services::dbus::FanProfile;
 use crate::components::animatrix::{AnimatrixModel, AnimatrixMsg};
+use crate::components::about::AboutModel;
 use crate::components::AppearanceModel;
 use crate::components::aura::AuraPageModel;
 use crate::components::aura::AuraPageMsg;
@@ -145,6 +146,7 @@ pub struct AppModel {
     thermal_profile: Controller<ThermalProfileModel>,
     oled_dimming: Controller<OledDimmingModel>,
     appearance: Controller<AppearanceModel>,
+    about: Controller<AboutModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
     fn_key: Controller<FnKeyModel>,
@@ -344,6 +346,7 @@ impl SimpleComponent for AppModel {
         let thermal_profile = launch_component!(ThermalProfileModel, sender);
         let oled_dimming = launch_component!(OledDimmingModel, sender);
         let appearance = launch_component!(AppearanceModel, sender);
+        let about = launch_component!(AboutModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
         let fn_key = launch_component!(FnKeyModel, sender);
@@ -430,6 +433,7 @@ impl SimpleComponent for AppModel {
             thermal_profile,
             oled_dimming,
             appearance,
+            about,
             aura,
             animatrix,
             fn_key,
@@ -453,6 +457,7 @@ impl SimpleComponent for AppModel {
         let _fan_widget = model.fan.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
         let appearance_widget = model.appearance.widget();
+        let about_widget = model.about.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
         let fn_key_widget = model.fn_key.widget();
@@ -604,8 +609,7 @@ impl SimpleComponent for AppModel {
         battery_page.add(battery_health_widget);
         content_stack.add_named(&battery_page, Some(AppPage::Battery.as_str()));
         content_stack.add_named(appearance_widget, Some(AppPage::Appearance.as_str()));
-        let about_placeholder = adw::PreferencesPage::new();
-        content_stack.add_named(&about_placeholder, Some(AppPage::About.as_str()));
+        content_stack.add_named(about_widget, Some(AppPage::About.as_str()));
         let hardware_placeholder = adw::PreferencesPage::new();
         content_stack.add_named(&hardware_placeholder, Some(AppPage::Hardware.as_str()));
 
@@ -702,51 +706,6 @@ impl SimpleComponent for AppModel {
         sidebar_toolbar.add_top_bar(&sidebar_header);
         sidebar_toolbar.add_top_bar(&search_widgets.bar);
         sidebar_toolbar.set_content(Some(&sidebar_list));
-
-        // Bottom bar: GitHub + "Made by Guido" + version
-        {
-            let bottom_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            bottom_box.set_margin_top(6);
-            bottom_box.set_margin_bottom(6);
-            bottom_box.set_margin_start(10);
-            bottom_box.set_margin_end(10);
-
-            let github_btn = gtk4::Button::new();
-            github_btn.add_css_class("flat");
-            github_btn.set_tooltip_text(Some("GitHub"));
-            let svg_bytes = include_bytes!("../assets/img/github.svg");
-            let glib_bytes = gtk4::glib::Bytes::from_static(svg_bytes);
-            if let Ok(texture) = gtk4::gdk::Texture::from_bytes(&glib_bytes) {
-                let gh_icon = gtk4::Image::from_paintable(Some(&texture));
-                gh_icon.set_pixel_size(16);
-                github_btn.set_child(Some(&gh_icon));
-            }
-            github_btn.connect_clicked(|_| {
-                let _ = Command::new("xdg-open")
-                    .arg("https://github.com/Baraka-Malila/utu")
-                    .process_group(0)
-                    .spawn();
-            });
-
-            let made_by_label = gtk4::Label::new(Some("Baraka Malila"));
-            made_by_label.add_css_class("dim-label");
-            made_by_label.set_margin_start(6);
-            made_by_label.set_valign(gtk4::Align::Center);
-
-            let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            spacer.set_hexpand(true);
-
-            let version_label = gtk4::Label::new(Some(concat!("v", env!("CARGO_PKG_VERSION"))));
-            version_label.add_css_class("dim-label");
-            version_label.set_valign(gtk4::Align::Center);
-
-            bottom_box.append(&github_btn);
-            bottom_box.append(&made_by_label);
-            bottom_box.append(&spacer);
-            bottom_box.append(&version_label);
-
-            sidebar_toolbar.add_bottom_bar(&bottom_box);
-        }
 
         let sidebar_nav_page = adw::NavigationPage::new(&sidebar_toolbar, &t!("app_title"));
 

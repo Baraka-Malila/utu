@@ -17,6 +17,7 @@
 pub mod widgets;
 
 pub mod animatrix;
+pub mod about;
 pub mod appearance;
 pub mod audio;
 pub mod aura;
