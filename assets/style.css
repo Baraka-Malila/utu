@@ -1,15 +1,183 @@
-.nav-separator {
-    min-height: 2px;
+/* ── Color layer backgrounds ─────────────────────────────────────────── */
+window, .window-background {
+    background-color: #1e1e1e;
+}
+.navigation-sidebar {
+    background-color: #161616;
+}
+.card, .mode-card {
+    background-color: #242424;
 }
 
+/* ── Sidebar nav group labels ────────────────────────────────────────── */
+.nav-group-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    color: alpha(@window_fg_color, 0.55);
+    margin-top: 12px;
+    margin-bottom: 2px;
+    margin-left: 14px;
+}
+
+/* ── Section divider (> > > > LABEL) ────────────────────────────────── */
+.section-divider-chevrons {
+    font-size: 1.1rem;
+    letter-spacing: 0.3em;
+    color: alpha(var(--utu-accent, #e8a800), 0.60);
+}
+.section-divider-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    color: alpha(@window_fg_color, 0.70);
+}
+
+/* ── Mode cards (Thermal, GPU, Fn Key, Keyboard idle) ───────────────── */
+.mode-card {
+    border-radius: 12px;
+    border: 1.5px solid transparent;
+    padding: 0;
+}
+.mode-card-active {
+    border: 2px solid var(--utu-accent, #e8a800);
+    background-color: var(--utu-accent-dim, rgba(232,168,0,0.15));
+}
+
+/* ── Home operating-mode strip (underline only on active) ───────────── */
+.home-mode-card {
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    padding: 4px 2px;
+}
+.home-mode-card-active {
+    border-bottom: 2px solid var(--utu-accent, #e8a800);
+    background-color: var(--utu-accent-dim, rgba(232,168,0,0.15));
+}
+
+/* ── Segmented pill strip ────────────────────────────────────────────── */
+.pill-strip {
+    border-radius: 20px;
+}
+.pill-strip > button {
+    border-radius: 0;
+    min-height: 30px;
+    padding: 4px 12px;
+}
+.pill-strip > button:first-child {
+    border-top-left-radius: 20px;
+    border-bottom-left-radius: 20px;
+}
+.pill-strip > button:last-child {
+    border-top-right-radius: 20px;
+    border-bottom-right-radius: 20px;
+}
+.pill-strip > button.active-pill {
+    background-color: var(--utu-accent, #e8a800);
+    color: #000000;
+    font-weight: 600;
+}
+
+/* ── Mode icon grid (Lighting page) ─────────────────────────────────── */
+.mode-grid-panel {
+    border: 1.5px solid var(--utu-accent, #e8a800);
+    border-radius: 12px;
+    padding: 12px;
+}
+.mode-grid-cell {
+    border-radius: 8px;
+    padding: 12px 8px;
+    border: 1.5px solid transparent;
+}
+.mode-grid-cell-active {
+    border: 1.5px solid var(--utu-accent, #e8a800);
+    background-color: var(--utu-accent-dim, rgba(232,168,0,0.15));
+}
+
+/* ── Metric lines (Systems Monitor, thin accent bar below rows) ──────── */
+.metric-line {
+    background-color: var(--utu-accent, #e8a800);
+    min-height: 1px;
+    max-height: 1px;
+    opacity: 0.6;
+}
+
+/* ── Home page ambient glow footer ──────────────────────────────────── */
+.glow-footer {
+    background: linear-gradient(
+        to top,
+        var(--utu-accent-glow, rgba(232,168,0,0.05)),
+        transparent
+    );
+    min-height: 60px;
+}
+
+/* ── Battery health graph container ─────────────────────────────────── */
+.health-graph {
+    background-color: #1e1e1e;
+    border-radius: 8px;
+    min-height: 180px;
+}
+
+/* ── gtk::Scale sliders ──────────────────────────────────────────────── */
+scale trough {
+    min-height: 8px;
+    background-color: #333333;
+    border-radius: 4px;
+}
+scale trough highlight {
+    background: linear-gradient(
+        to right,
+        var(--utu-accent, #e8a800),
+        var(--utu-accent-end, #c07800)
+    );
+    border-radius: 4px;
+}
+scale slider {
+    min-width: 20px;
+    min-height: 20px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px alpha(black, 0.4);
+}
+
+/* ── Fan OSD overlay ─────────────────────────────────────────────────── */
 .fan-osd {
     background: alpha(@card_bg_color, 0.92);
     border-radius: 18px;
     box-shadow: 0 8px 32px alpha(black, 0.45);
     padding: 4px 8px;
 }
-
 .fan-osd-label {
     font-size: 1.1rem;
     font-weight: 600;
+}
+
+/* ── Accent swatch circles (Appearance page) ─────────────────────────── */
+.accent-swatch {
+    min-width: 48px;
+    min-height: 48px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    padding: 0;
+}
+.accent-swatch-active {
+    border: 3px solid @window_fg_color;
+}
+
+/* ── Sub-section dot headers ─────────────────────────────────────────── */
+.subsection-dot {
+    color: var(--utu-accent, #e8a800);
+    font-size: 1.0rem;
+}
+.subsection-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    color: alpha(@window_fg_color, 0.70);
+}
+
+/* ── Legacy nav separator (kept for compatibility) ───────────────────── */
+.nav-separator {
+    min-height: 2px;
 }

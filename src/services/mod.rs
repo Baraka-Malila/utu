@@ -26,3 +26,4 @@ pub mod gnome_brightness;
 pub mod migration;
 pub mod numberpad;
 pub mod numberpad_layouts;
+pub mod theme;
