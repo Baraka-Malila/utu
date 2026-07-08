@@ -71,9 +71,9 @@ pub struct AuraDeviceModel {
     // Widget handles kept on the model so we can update selections, colours
     // and switch states directly when reloading a profile or refreshing from
     // the daemon, without rebuilding the declarative view.
-    mode_combo: adw::ComboRow,
+    mode_flow: gtk::FlowBox,
     zone_row: adw::ComboRow,
-    brightness_combo: adw::ComboRow,
+    brightness_strip: gtk::Box,
     colour1_row: adw::ActionRow,
     colour1_button: gtk::ColorDialogButton,
     colour2_row: adw::ActionRow,
@@ -146,11 +146,7 @@ impl Component for AuraDeviceModel {
             #[watch]
             set_title: &t!(model.info.kind.i18n_key()),
 
-            add = &model.mode_combo.clone() -> adw::ComboRow {
-                set_title: &t!("aura_mode_title"),
-                #[watch]
-                set_sensitive: model.initialised,
-            },
+            add = &model.mode_flow.clone(),
 
             add = &model.zone_row.clone() -> adw::ComboRow {
                 set_title: &t!("aura_zone_title"),
@@ -160,11 +156,7 @@ impl Component for AuraDeviceModel {
                 set_sensitive: model.initialised,
             },
 
-            add = &model.brightness_combo.clone() -> adw::ComboRow {
-                set_title: &t!("aura_brightness_title"),
-                #[watch]
-                set_sensitive: model.initialised,
-            },
+            add = &model.brightness_strip.clone(),
 
             add = &model.colour1_row.clone() -> adw::ActionRow {
                 set_title: &t!("aura_colour_title"),
@@ -211,12 +203,15 @@ impl Component for AuraDeviceModel {
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let mode_combo = adw::ComboRow::new();
-        mode_combo.set_model(Some(&gtk::StringList::new(&[&t!("aura_mode_static")])));
-        mode_combo.connect_selected_notify({
-            let sender = sender.clone();
-            move |row| sender.input(AuraDeviceMsg::ChangeMode(row.selected()))
-        });
+        let mode_flow = gtk::FlowBox::new();
+        mode_flow.set_max_children_per_line(3);
+        mode_flow.set_min_children_per_line(1);
+        mode_flow.set_selection_mode(gtk::SelectionMode::None);
+        mode_flow.set_column_spacing(8);
+        mode_flow.set_row_spacing(8);
+        mode_flow.set_margin_top(8);
+        mode_flow.set_margin_bottom(8);
+        mode_flow.set_homogeneous(true);
 
         let zone_row = adw::ComboRow::new();
         zone_row.set_model(Some(&gtk::StringList::new(&[&t!("aura_zone_none")])));
@@ -225,14 +220,13 @@ impl Component for AuraDeviceModel {
             move |row| sender.input(AuraDeviceMsg::ChangeZone(row.selected()))
         });
 
-        let brightness_combo = adw::ComboRow::new();
-        let bright_labels: Vec<String> = BRIGHTNESS_KEYS.iter().map(|k| t!(*k).to_string()).collect();
-        let bright_refs: Vec<&str> = bright_labels.iter().map(|s| s.as_str()).collect();
-        brightness_combo.set_model(Some(&gtk::StringList::new(&bright_refs)));
-        brightness_combo.connect_selected_notify({
-            let sender = sender.clone();
-            move |row| sender.input(AuraDeviceMsg::ChangeBrightness(row.selected()))
-        });
+        let brightness_strip = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(0)
+            .margin_top(8)
+            .margin_bottom(8)
+            .build();
+        brightness_strip.add_css_class("linked");
 
         let colour1_button = gtk::ColorDialogButton::new(Some(gtk::ColorDialog::new()));
         colour1_button.set_valign(gtk::Align::Center);
@@ -288,9 +282,9 @@ impl Component for AuraDeviceModel {
             current_direction: "Right".to_string(),
             effect_cache: BTreeMap::new(),
             power_state: LaptopAuraPower { states: Vec::new() },
-            mode_combo,
+            mode_flow,
             zone_row,
-            brightness_combo,
+            brightness_strip,
             colour1_row,
             colour1_button,
             colour2_row,
@@ -455,9 +449,9 @@ impl Component for AuraDeviceModel {
                 self.current_speed = speed;
                 self.current_direction = direction;
 
-                self.sync_mode_widget();
+                self.rebuild_mode_flow(&sender);
                 self.sync_zone_widget();
-                self.brightness_combo.set_selected(self.current_brightness);
+                self.rebuild_brightness_strip(&sender);
                 self.sync_colour_widgets();
                 self.sync_speed_direction_widgets();
 
@@ -512,9 +506,9 @@ impl Component for AuraDeviceModel {
                 self.apply_effect_to_state(&current_effect);
                 self.current_brightness = brightness.min(3);
 
-                self.refresh_mode_model();
+                self.rebuild_mode_flow(&sender);
                 self.refresh_zone_model();
-                self.brightness_combo.set_selected(self.current_brightness);
+                self.rebuild_brightness_strip(&sender);
                 self.sync_colour_widgets();
                 self.sync_speed_direction_widgets();
                 self.rebuild_power_rows(sender);
@@ -580,15 +574,41 @@ impl AuraDeviceModel {
         });
     }
 
-    fn refresh_mode_model(&self) {
-        let labels: Vec<String> = self
-            .supported_modes
-            .iter()
-            .map(|m| t!(m.i18n_key()).to_string())
-            .collect();
-        let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
-        self.mode_combo.set_model(Some(&gtk::StringList::new(&refs)));
-        self.sync_mode_widget();
+    fn rebuild_mode_flow(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.mode_flow.first_child() {
+            self.mode_flow.remove(&child);
+        }
+        for (idx, &mode) in self.supported_modes.iter().enumerate() {
+            let active = mode == self.current_mode;
+            let cell = mode_cell(
+                mode_icon(mode),
+                &t!(mode.i18n_key()),
+                active,
+                sender.clone(),
+                idx as u32,
+            );
+            self.mode_flow.append(&cell);
+        }
+    }
+
+    fn rebuild_brightness_strip(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.brightness_strip.first_child() {
+            self.brightness_strip.remove(&child);
+        }
+        for (i, key) in BRIGHTNESS_KEYS.iter().enumerate() {
+            let active = i as u32 == self.current_brightness;
+            let label = t!(*key).to_string();
+            let btn = gtk::ToggleButton::with_label(&label);
+            btn.set_active(active);
+            if active {
+                btn.add_css_class("suggested-action");
+            }
+            let sender = sender.clone();
+            btn.connect_clicked(move |_| {
+                sender.input(AuraDeviceMsg::ChangeBrightness(i as u32));
+            });
+            self.brightness_strip.append(&btn);
+        }
     }
 
     fn refresh_zone_model(&self) {
@@ -600,16 +620,6 @@ impl AuraDeviceModel {
         let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
         self.zone_row.set_model(Some(&gtk::StringList::new(&refs)));
         self.sync_zone_widget();
-    }
-
-    fn sync_mode_widget(&self) {
-        if let Some(idx) = self
-            .supported_modes
-            .iter()
-            .position(|&m| m == self.current_mode)
-        {
-            self.mode_combo.set_selected(idx as u32);
-        }
     }
 
     fn sync_zone_widget(&self) {
@@ -748,6 +758,64 @@ impl AuraDeviceModel {
             p.aura_direction = direction;
         });
     }
+}
+
+fn mode_icon(mode: AuraModeNum) -> &'static str {
+    match mode {
+        AuraModeNum::Static => "color-select-symbolic",
+        AuraModeNum::Breathe => "weather-clear-night-symbolic",
+        AuraModeNum::RainbowCycle => "weather-overcast-symbolic",
+        AuraModeNum::RainbowWave => "view-list-symbolic",
+        AuraModeNum::Star => "starred-symbolic",
+        AuraModeNum::Rain => "weather-showers-symbolic",
+        AuraModeNum::Highlight => "starred-symbolic",
+        AuraModeNum::Laser => "network-transmit-symbolic",
+        AuraModeNum::Ripple => "audio-volume-medium-symbolic",
+        AuraModeNum::Pulse => "weather-storm-symbolic",
+        AuraModeNum::Comet => "go-jump-symbolic",
+        AuraModeNum::Flash => "weather-storm-symbolic",
+    }
+}
+
+fn mode_cell(
+    icon: &str,
+    name: &str,
+    active: bool,
+    sender: ComponentSender<AuraDeviceModel>,
+    idx: u32,
+) -> gtk::Button {
+    let icon_w = gtk::Image::from_icon_name(icon);
+    icon_w.set_pixel_size(32);
+
+    let name_l = gtk::Label::new(Some(name));
+    name_l.add_css_class("caption");
+    name_l.set_halign(gtk::Align::Center);
+    name_l.set_wrap(true);
+    name_l.set_max_width_chars(10);
+
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(8)
+        .margin_end(8)
+        .halign(gtk::Align::Center)
+        .build();
+    inner.append(&icon_w);
+    inner.append(&name_l);
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&inner));
+    btn.add_css_class("flat");
+    btn.add_css_class("mode-card");
+    if active {
+        btn.add_css_class("mode-card-active");
+    }
+    btn.connect_clicked(move |_| {
+        sender.input(AuraDeviceMsg::ChangeMode(idx));
+    });
+    btn
 }
 
 fn colour_to_rgba(c: Colour) -> RGBA {
