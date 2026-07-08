@@ -373,7 +373,7 @@ pub struct AnimatrixModel {
     playback_cancel: Option<tokio::sync::oneshot::Sender<()>>,
     // Widget handles kept on the model so `LoadProfile` can update the
     // selected entries without going through the declarative view.
-    brightness_combo: adw::ComboRow,
+    brightness_strip: gtk::Box,
     boot_combo: adw::ComboRow,
     awake_combo: adw::ComboRow,
     sleep_combo: adw::ComboRow,
@@ -393,6 +393,31 @@ impl AnimatrixModel {
 
     fn controls_sensitive(&self) -> bool {
         self.status == AnimatrixStatus::Available
+    }
+
+    fn rebuild_brightness_strip(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.brightness_strip.first_child() {
+            self.brightness_strip.remove(&child);
+        }
+        let keys = [
+            "aura_brightness_off",
+            "aura_brightness_low",
+            "aura_brightness_med",
+            "aura_brightness_high",
+        ];
+        for (i, key) in keys.iter().enumerate() {
+            let active = i as u32 == self.current_brightness;
+            let btn = gtk::ToggleButton::with_label(&t!(*key));
+            btn.set_active(active);
+            if active {
+                btn.add_css_class("suggested-action");
+            }
+            let sender = sender.clone();
+            btn.connect_clicked(move |_| {
+                sender.input(AnimatrixMsg::ChangeBrightness(i as u32));
+            });
+            self.brightness_strip.append(&btn);
+        }
     }
 
     fn builtins_sensitive(&self) -> bool {
@@ -516,10 +541,11 @@ impl Component for AnimatrixModel {
                 },
             },
 
-            add = &model.brightness_combo.clone() -> adw::ComboRow {
+            add = &adw::ActionRow {
                 set_title: &t!("animatrix_brightness_title"),
                 #[watch]
                 set_sensitive: model.controls_sensitive(),
+                add_suffix = &model.brightness_strip.clone(),
             },
 
             add = &adw::SwitchRow {
@@ -644,23 +670,12 @@ impl Component for AnimatrixModel {
             .filter(|e| e.supports(hardware_type))
             .collect();
 
-        let br_off = t!("aura_brightness_off").to_string();
-        let br_low = t!("aura_brightness_low").to_string();
-        let br_med = t!("aura_brightness_med").to_string();
-        let br_high = t!("aura_brightness_high").to_string();
-        let brightness_refs: Vec<&str> = vec![
-            br_off.as_str(),
-            br_low.as_str(),
-            br_med.as_str(),
-            br_high.as_str(),
-        ];
-        let brightness_combo = adw::ComboRow::new();
-        brightness_combo.set_model(Some(&gtk::StringList::new(&brightness_refs)));
-        brightness_combo.set_selected(p.animatrix_brightness.min(3));
-        brightness_combo.connect_selected_notify({
-            let sender = sender.clone();
-            move |row| sender.input(AnimatrixMsg::ChangeBrightness(row.selected()))
-        });
+        let brightness_strip = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(0)
+            .valign(gtk::Align::Center)
+            .build();
+        brightness_strip.add_css_class("linked");
 
         // Animation combos
         let boot_combo = build_anim_combo(&BOOT_ANIMS, &p.animatrix_boot_anim, {
@@ -710,7 +725,7 @@ impl Component for AnimatrixModel {
             play_btn_label: t!("animatrix_play_button").to_string(),
             playing_title: String::new(),
             playback_cancel: None,
-            brightness_combo,
+            brightness_strip,
             boot_combo,
             awake_combo,
             sleep_combo,
@@ -719,6 +734,7 @@ impl Component for AnimatrixModel {
         };
 
         let widgets = view_output!();
+        model.rebuild_brightness_strip(&sender);
 
         if hardware_type != AnimatrixHardwareType::Unsupported {
             sender.command(move |out, shutdown| {
@@ -785,6 +801,7 @@ impl Component for AnimatrixModel {
                     return;
                 }
                 self.current_brightness = idx;
+                self.rebuild_brightness_strip(&sender);
                 AppConfig::update(|c| c.active_profile_mut().animatrix_brightness = idx);
                 sender.command(move |out, shutdown| {
                     shutdown
@@ -1003,7 +1020,7 @@ impl Component for AnimatrixModel {
                 self.current_off_suspended = off_suspended;
                 self.current_off_lid_closed = off_lid_closed;
 
-                self.brightness_combo.set_selected(self.current_brightness);
+                self.rebuild_brightness_strip(&sender);
                 self.boot_combo
                     .set_selected(anim_index(&BOOT_ANIMS, &boot_anim));
                 self.awake_combo
@@ -1067,7 +1084,7 @@ impl Component for AnimatrixModel {
                 self.current_off_suspended = off_suspended;
                 self.current_off_lid_closed = off_lid_closed;
 
-                self.brightness_combo.set_selected(brightness);
+                self.rebuild_brightness_strip(&sender);
                 self.boot_combo
                     .set_selected(anim_index(&BOOT_ANIMS, &animations.boot));
                 self.awake_combo
