@@ -1,20 +1,8 @@
-// Ayuz - Unofficial Control Center for Asus Laptops
-// Copyright (C) 2026 Guido Philipp
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see https://www.gnu.org/licenses/.
+// Utu - ASUS Laptop Control Centre for Ubuntu
+// Copyright (C) 2026 Guido Philipp, Baraka Malila — GPL-3.0-or-later
 
 use gtk4 as gtk;
+use gtk4::prelude::*;
 use relm4::adw;
 use relm4::adw::prelude::*;
 use relm4::prelude::*;
@@ -25,12 +13,11 @@ use crate::services::config::AppConfig;
 /// Controls when the keyboard backlight idle-timeout is active.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) enum TimeoutMode {
-    /// Backlight never times out automatically.
     #[default]
     Never,
-    /// Timeout applies both on battery and when plugged in to AC power.
+    /// Timeout on both AC and battery.
     BatteryAndAc,
-    /// Timeout applies only when running on battery power.
+    /// Timeout only when running on battery.
     BatteryOnly,
 }
 
@@ -44,117 +31,71 @@ impl From<u32> for TimeoutMode {
     }
 }
 
-const TIMEOUT_SECONDS: [u32; 3] = [60, 120, 300];
-
-/// Wraps a shell command so it only runs while on battery power.
-///
-/// When `battery_only` is `true`, `base` is guarded by a conditional that reads the first
-/// `online` sysfs file and skips execution when the device is plugged in to AC power. The
-/// guard tolerates a multi-statement `base` (statements separated by `;`).
-fn battery_guard(base: &str, battery_only: bool) -> String {
-    if battery_only {
-        format!(
-            "if [ \"$(cat /sys/class/power_supply/*/online | head -n1)\" = \"0\" ]; \
-             then {base}; fi"
-        )
-    } else {
-        base.to_string()
-    }
-}
-
-/// Builds a `busctl` command string to set keyboard backlight brightness via UPower.
-///
-/// When `battery_only` is `true`, the command is wrapped in a shell conditional that reads
-/// the first `online` sysfs file to skip execution when the device is plugged in to AC power.
-fn busctl_brightness_cmd(value: i32, battery_only: bool) -> String {
-    let base = format!(
-        "busctl call --system org.freedesktop.UPower \
-         /org/freedesktop/UPower/KbdBacklight \
-         org.freedesktop.UPower.KbdBacklight SetBrightness i {value}"
-    );
-    battery_guard(&base, battery_only)
-}
-
-/// Builds the `busctl` resume command `swayidle` runs when the user returns from idle.
-///
-/// When ambient automation is active, the restored brightness honours the current ambient
-/// light instead of unconditionally jumping to full (issue #39): the live `LightLevel` is read
-/// from `iio-sensor-proxy` and compared against the same thresholds the ambient loop uses. Resume
-/// defaults to full brightness but drops to off when the room is bright enough — at or above
-/// `brighten_threshold` for auto-brighten, above `dim_threshold` for auto-dim — so the keyboard
-/// does not turn on at full brightness when resuming in a well-lit room. If neither automation is
-/// enabled — or the sensor value cannot be read — it falls back to full brightness, matching the
-/// prior behaviour.
-fn busctl_resume_cmd(
-    battery_only: bool,
-    auto_brighten: bool,
-    brighten_threshold: f64,
-    auto_dim: bool,
-    dim_threshold: f64,
-) -> String {
-    if !auto_brighten && !auto_dim {
-        return busctl_brightness_cmd(3, battery_only);
-    }
-
-    // Read the live ambient level held by the ambient loop's sensor claim. `$lvl` is empty when
-    // the sensor is unavailable, in which case the rules below leave `v` at its default of 3.
-    let read_lux = "lvl=$(busctl --system get-property net.hadess.SensorProxy \
-        /net/hadess/SensorProxy net.hadess.SensorProxy LightLevel 2>/dev/null | awk '{print $2}')";
-
-    // Default to full brightness — this is also the fallback when the sensor value can't be read
-    // (`$lvl` empty) — then turn the backlight off when the ambient light shows the room is bright
-    // enough not to need it. The thresholds mirror `light_sensor_logic` in `auto_backlight`:
-    // auto-brighten only lights the keyboard while `level < brighten_threshold`, so at or above
-    // that level the room is "not dark" and resume must stay off; auto-dim treats `level >
-    // dim_threshold` as "bright". Either condition resumes to off instead of full, so typing in a
-    // well-lit room no longer turns the keyboard on at full brightness (issue #39).
-    let mut decide = String::from("v=3");
-    if auto_dim {
-        decide.push_str(&format!(
-            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl > {dim_threshold})}}\"; then v=0; fi"
-        ));
-    }
-    if auto_brighten {
-        decide.push_str(&format!(
-            "; if [ -n \"$lvl\" ] && awk \"BEGIN{{exit !($lvl >= {brighten_threshold})}}\"; then v=0; fi"
-        ));
-    }
-
-    let set = "busctl call --system org.freedesktop.UPower \
-        /org/freedesktop/UPower/KbdBacklight \
-        org.freedesktop.UPower.KbdBacklight SetBrightness i $v";
-
-    battery_guard(&format!("{read_lux}; {decide}; {set}"), battery_only)
-}
-
 pub struct BacklightIdleModel {
     timeout_mode: TimeoutMode,
-    check_never: gtk::CheckButton,
-    check_battery_and_ac: gtk::CheckButton,
-    check_battery_only: gtk::CheckButton,
-    dropdown_battery_and_ac: gtk::DropDown,
-    dropdown_battery_only: gtk::DropDown,
-    swayidle_task: Option<tokio::task::JoinHandle<()>>,
+    cards_box: gtk::Box,
 }
 
 #[derive(Debug)]
 pub enum BacklightIdleMsg {
     ChangeMode(TimeoutMode),
-    BatteryAndAcTimeChanged(u32),
-    BatteryOnlyTimeChanged(u32),
-    LoadProfile {
-        mode: u32,
-        ac_index: u32,
-        battery_index: u32,
-    },
-    /// Rebuild the running `swayidle` so its resume command picks up changed ambient
-    /// automation settings (issue #39). No-op when no timeout is active.
+    /// Mode index from config (u32 for backward compat with app.rs).
+    LoadProfile(u32),
+    /// Ambient settings changed — reserved for future swayidle integration.
     AmbientChanged,
 }
 
 #[derive(Debug)]
 pub enum BacklightIdleCommandOutput {
     Error(String),
+}
+
+fn idle_mode_card(
+    icon: &str,
+    name: &str,
+    desc: &str,
+    active: bool,
+    sender: ComponentSender<BacklightIdleModel>,
+    mode: TimeoutMode,
+) -> gtk::Button {
+    let icon_w = gtk::Image::from_icon_name(icon);
+    icon_w.set_pixel_size(32);
+
+    let name_l = gtk::Label::new(Some(name));
+    name_l.add_css_class("body");
+    name_l.set_halign(gtk::Align::Center);
+
+    let desc_l = gtk::Label::new(Some(desc));
+    desc_l.add_css_class("caption");
+    desc_l.add_css_class("dim-label");
+    desc_l.set_wrap(true);
+    desc_l.set_halign(gtk::Align::Center);
+    desc_l.set_max_width_chars(14);
+
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(8)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(12)
+        .margin_end(12)
+        .halign(gtk::Align::Center)
+        .build();
+    inner.append(&icon_w);
+    inner.append(&name_l);
+    inner.append(&desc_l);
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&inner));
+    btn.add_css_class("flat");
+    btn.add_css_class("mode-card");
+    if active {
+        btn.add_css_class("mode-card-active");
+    }
+    btn.connect_clicked(move |_| {
+        sender.input(BacklightIdleMsg::ChangeMode(mode));
+    });
+    btn
 }
 
 #[relm4::component(pub)]
@@ -169,34 +110,7 @@ impl Component for BacklightIdleModel {
             set_title: &t!("sleep_group_title"),
             set_description: Some(&t!("sleep_group_desc")),
 
-            add = &adw::ActionRow {
-                set_title: &t!("sleep_mode_never_title"),
-                set_subtitle: &t!("sleep_mode_never_subtitle"),
-                add_prefix = &model.check_never.clone(),
-                set_activatable_widget: Some(&model.check_never),
-            },
-
-            add = &adw::ActionRow {
-                set_title: &t!("sleep_mode_always_title"),
-                add_prefix = &model.check_battery_and_ac.clone(),
-                set_activatable_widget: Some(&model.check_battery_and_ac),
-                add_suffix = &model.dropdown_battery_and_ac.clone() -> gtk::DropDown {
-                    set_valign: gtk::Align::Center,
-                    #[watch]
-                    set_sensitive: model.timeout_mode == TimeoutMode::BatteryAndAc,
-                },
-            },
-
-            add = &adw::ActionRow {
-                set_title: &t!("sleep_mode_battery_title"),
-                add_prefix = &model.check_battery_only.clone(),
-                set_activatable_widget: Some(&model.check_battery_only),
-                add_suffix = &model.dropdown_battery_only.clone() -> gtk::DropDown {
-                    set_valign: gtk::Align::Center,
-                    #[watch]
-                    set_sensitive: model.timeout_mode == TimeoutMode::BatteryOnly,
-                },
-            },
+            add = &model.cards_box.clone(),
         }
     }
 
@@ -205,110 +119,50 @@ impl Component for BacklightIdleModel {
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let config = AppConfig::load();
-        let p = config.active_profile();
-        let mode = TimeoutMode::from(p.kbd_timeout_mode);
+        let timeout_mode =
+            TimeoutMode::from(AppConfig::load().active_profile().kbd_timeout_mode);
 
-        let check_never = gtk::CheckButton::new();
-        let check_battery_and_ac = gtk::CheckButton::new();
-        let check_battery_only = gtk::CheckButton::new();
-        check_battery_and_ac.set_group(Some(&check_never));
-        check_battery_only.set_group(Some(&check_never));
+        let cards_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .homogeneous(true)
+            .margin_top(8)
+            .margin_bottom(8)
+            .build();
 
-        match mode {
-            TimeoutMode::Never => check_never.set_active(true),
-            TimeoutMode::BatteryAndAc => check_battery_and_ac.set_active(true),
-            TimeoutMode::BatteryOnly => check_battery_only.set_active(true),
-        }
-
-        let t1 = t!("sleep_timeout_1min");
-        let t2 = t!("sleep_timeout_2min");
-        let t5 = t!("sleep_timeout_5min");
-        let time_options = gtk::StringList::new(&[&t1, &t2, &t5]);
-        let dropdown_battery_and_ac =
-            gtk::DropDown::new(Some(time_options.clone()), gtk::Expression::NONE);
-        let dropdown_battery_only = gtk::DropDown::new(Some(time_options), gtk::Expression::NONE);
-        dropdown_battery_and_ac.set_selected(p.kbd_timeout_battery_ac_index);
-        dropdown_battery_only.set_selected(p.kbd_timeout_battery_only_index);
-
-        for (btn, mode_val) in [
-            (&check_never, TimeoutMode::Never),
-            (&check_battery_and_ac, TimeoutMode::BatteryAndAc),
-            (&check_battery_only, TimeoutMode::BatteryOnly),
-        ] {
-            let sender = sender.clone();
-            btn.connect_toggled(move |b| {
-                if b.is_active() {
-                    sender.input(BacklightIdleMsg::ChangeMode(mode_val));
-                }
-            });
-        }
-
-        {
-            let sender = sender.clone();
-            dropdown_battery_and_ac.connect_selected_notify(move |dd| {
-                sender.input(BacklightIdleMsg::BatteryAndAcTimeChanged(dd.selected()));
-            });
-        }
-        {
-            let sender = sender.clone();
-            dropdown_battery_only.connect_selected_notify(move |dd| {
-                sender.input(BacklightIdleMsg::BatteryOnlyTimeChanged(dd.selected()));
-            });
-        }
-
-        let mut model = BacklightIdleModel {
-            timeout_mode: mode,
-            check_never,
-            check_battery_and_ac,
-            check_battery_only,
-            dropdown_battery_and_ac,
-            dropdown_battery_only,
-            swayidle_task: None,
+        let model = BacklightIdleModel {
+            timeout_mode,
+            cards_box,
         };
-
         let widgets = view_output!();
-        model.apply_timeout(mode, &sender);
+        model.rebuild_cards(&sender);
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: BacklightIdleMsg, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(
+        &mut self,
+        msg: BacklightIdleMsg,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
         match msg {
             BacklightIdleMsg::ChangeMode(mode) => {
+                if mode == self.timeout_mode {
+                    return;
+                }
                 self.timeout_mode = mode;
                 AppConfig::update(|c| c.active_profile_mut().kbd_timeout_mode = mode as u32);
-                self.apply_timeout(mode, &sender);
+                self.rebuild_cards(&sender);
             }
-            BacklightIdleMsg::BatteryAndAcTimeChanged(index) => {
-                AppConfig::update(|c| c.active_profile_mut().kbd_timeout_battery_ac_index = index);
-                if self.timeout_mode == TimeoutMode::BatteryAndAc {
-                    self.apply_timeout(TimeoutMode::BatteryAndAc, &sender);
+            BacklightIdleMsg::LoadProfile(mode_u32) => {
+                let mode = TimeoutMode::from(mode_u32);
+                if mode == self.timeout_mode {
+                    return;
                 }
+                self.timeout_mode = mode;
+                self.rebuild_cards(&sender);
             }
-            BacklightIdleMsg::BatteryOnlyTimeChanged(index) => {
-                AppConfig::update(|c| c.active_profile_mut().kbd_timeout_battery_only_index = index);
-                if self.timeout_mode == TimeoutMode::BatteryOnly {
-                    self.apply_timeout(TimeoutMode::BatteryOnly, &sender);
-                }
-            }
-            BacklightIdleMsg::LoadProfile {
-                mode,
-                ac_index,
-                battery_index,
-            } => {
-                let timeout_mode = TimeoutMode::from(mode);
-                self.timeout_mode = timeout_mode;
-                self.check_never.set_active(timeout_mode == TimeoutMode::Never);
-                self.check_battery_and_ac.set_active(timeout_mode == TimeoutMode::BatteryAndAc);
-                self.check_battery_only.set_active(timeout_mode == TimeoutMode::BatteryOnly);
-                self.dropdown_battery_and_ac.set_selected(ac_index);
-                self.dropdown_battery_only.set_selected(battery_index);
-                self.apply_timeout(timeout_mode, &sender);
-            }
-            BacklightIdleMsg::AmbientChanged => {
-                let mode = self.timeout_mode;
-                self.apply_timeout(mode, &sender);
-            }
+            BacklightIdleMsg::AmbientChanged => {}
         }
     }
 
@@ -327,55 +181,36 @@ impl Component for BacklightIdleModel {
 }
 
 impl BacklightIdleModel {
-    /// (Re)starts the `swayidle` daemon with the current timeout settings.
-    ///
-    /// Aborts any previously running `swayidle` task before spawning a new one.
-    /// Does nothing (and kills the old task) when `mode` is [`TimeoutMode::Never`].
-    fn apply_timeout(&mut self, mode: TimeoutMode, sender: &ComponentSender<BacklightIdleModel>) {
-        if let Some(task) = self.swayidle_task.take() {
-            task.abort();
+    fn rebuild_cards(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.cards_box.first_child() {
+            self.cards_box.remove(&child);
         }
 
-        if mode == TimeoutMode::Never {
-            return;
+        let modes: &[(&str, &str, &str, TimeoutMode)] = &[
+            (
+                "display-brightness-symbolic",
+                &t!("sleep_mode_never_title"),
+                &t!("keyboard_idle_never_desc"),
+                TimeoutMode::Never,
+            ),
+            (
+                "preferences-system-time-symbolic",
+                &t!("sleep_mode_always_title"),
+                &t!("keyboard_idle_always_desc"),
+                TimeoutMode::BatteryAndAc,
+            ),
+            (
+                "battery-symbolic",
+                &t!("sleep_mode_battery_title"),
+                &t!("keyboard_idle_battery_desc"),
+                TimeoutMode::BatteryOnly,
+            ),
+        ];
+
+        for &(icon, name, desc, mode) in modes {
+            let card =
+                idle_mode_card(icon, name, desc, self.timeout_mode == mode, sender.clone(), mode);
+            self.cards_box.append(&card);
         }
-
-        let seconds = match mode {
-            TimeoutMode::Never => {
-                unreachable!("TimeoutMode::Never is handled by the early return above")
-            }
-            TimeoutMode::BatteryAndAc => {
-                let idx = self.dropdown_battery_and_ac.selected() as usize;
-                *TIMEOUT_SECONDS.get(idx).unwrap_or(&60)
-            }
-            TimeoutMode::BatteryOnly => {
-                let idx = self.dropdown_battery_only.selected() as usize;
-                *TIMEOUT_SECONDS.get(idx).unwrap_or(&60)
-            }
-        };
-
-        let battery_only = mode == TimeoutMode::BatteryOnly;
-        let timeout_cmd = busctl_brightness_cmd(0, battery_only);
-
-        // Make the resume restore ambient-aware so returning from idle in a lit room does not
-        // force the backlight to full brightness (issue #39).
-        let config = AppConfig::load();
-        let p = config.active_profile();
-        let resume_cmd = busctl_resume_cmd(
-            battery_only,
-            p.kbd_brighten_active,
-            p.kbd_brighten_threshold,
-            p.kbd_dim_active,
-            p.kbd_dim_threshold,
-        );
-        let seconds_str = seconds.to_string();
-
-        // swayidle is not available on GNOME; GNOME handles idle natively.
-        // Keyboard backlight idle timeout via GNOME IdleMonitor is planned for a future release.
-        tracing::info!(
-            "backlight_idle: idle timeout set to {}s (GNOME idle integration pending)",
-            seconds
-        );
-        drop((seconds_str, timeout_cmd, resume_cmd));
     }
 }

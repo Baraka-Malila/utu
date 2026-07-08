@@ -177,11 +177,9 @@ impl AppModel {
             brighten_threshold: p.kbd_brighten_threshold,
             dim_threshold: p.kbd_dim_threshold,
         });
-        self.backlight_idle.sender().emit(BacklightIdleMsg::LoadProfile {
-            mode: p.kbd_timeout_mode,
-            ac_index: p.kbd_timeout_battery_ac_index,
-            battery_index: p.kbd_timeout_battery_only_index,
-        });
+        self.backlight_idle
+            .sender()
+            .emit(BacklightIdleMsg::LoadProfile(p.kbd_timeout_mode));
         self.aura.sender().emit(AuraPageMsg::LoadProfile {
             mode: p.aura_mode,
             zone: p.aura_zone,

@@ -1,20 +1,8 @@
-// Ayuz - Unofficial Control Center for Asus Laptops
-// Copyright (C) 2026 Guido Philipp
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see https://www.gnu.org/licenses/.
+// Utu - ASUS Laptop Control Centre for Ubuntu
+// Copyright (C) 2026 Guido Philipp, Baraka Malila — GPL-3.0-or-later
 
 use gtk4 as gtk;
+use gtk4::prelude::*;
 use relm4::adw;
 use relm4::adw::prelude::*;
 use relm4::prelude::*;
@@ -23,11 +11,6 @@ use rust_i18n::t;
 use crate::services::commands::{run_command_blocking, which_exists};
 use crate::services::config::AppConfig;
 
-/// Builds a root shell script that patches `/etc/default/grub` and runs
-/// `update-grub`. Removes any existing `asus_wmi.fnlock_default` entry from
-/// `GRUB_CMDLINE_LINUX_DEFAULT` then appends the new value.
-/// `locked=true` → fnlock_default=0 (fn keys are media keys by default, locked in that mode)
-/// `locked=false` → fnlock_default=1 (fn keys are F1-F12 by default)
 fn build_grub_script(locked: bool) -> String {
     let value = if locked { "0" } else { "1" };
     format!(
@@ -38,14 +21,61 @@ update-grub"#,
     )
 }
 
+fn fn_mode_card(
+    icon: &str,
+    name: &str,
+    desc: &str,
+    active: bool,
+    sensitive: bool,
+    sender: ComponentSender<FnKeyModel>,
+    locked: bool,
+) -> gtk::Button {
+    let icon_w = gtk::Image::from_icon_name(icon);
+    icon_w.set_pixel_size(32);
+
+    let name_l = gtk::Label::new(Some(name));
+    name_l.add_css_class("body");
+    name_l.set_halign(gtk::Align::Center);
+
+    let desc_l = gtk::Label::new(Some(desc));
+    desc_l.add_css_class("caption");
+    desc_l.add_css_class("dim-label");
+    desc_l.set_wrap(true);
+    desc_l.set_halign(gtk::Align::Center);
+    desc_l.set_max_width_chars(14);
+
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(8)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(12)
+        .margin_end(12)
+        .halign(gtk::Align::Center)
+        .build();
+    inner.append(&icon_w);
+    inner.append(&name_l);
+    inner.append(&desc_l);
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&inner));
+    btn.add_css_class("flat");
+    btn.add_css_class("mode-card");
+    btn.set_sensitive(sensitive);
+    if active {
+        btn.add_css_class("mode-card-active");
+    }
+    btn.connect_clicked(move |_| {
+        sender.input(FnKeyMsg::ToggleLocked(locked));
+    });
+    btn
+}
+
 pub struct FnKeyModel {
     locked: bool,
     update_grub_available: bool,
-    check_locked: gtk::CheckButton,
-    check_normal: gtk::CheckButton,
-    row_hint: adw::ActionRow,
-    row_locked: adw::ActionRow,
-    row_normal: adw::ActionRow,
+    cards_box: gtk::Box,
+    status_label: gtk::Label,
 }
 
 #[derive(Debug)]
@@ -80,9 +110,8 @@ impl Component for FnKeyModel {
                 set_label: &t!("fn_key_update_grub_missing_warning"),
             },
 
-            add = &model.row_hint.clone(),
-            add = &model.row_locked.clone(),
-            add = &model.row_normal.clone(),
+            add = &model.cards_box.clone(),
+            add = &model.status_label.clone(),
         }
     }
 
@@ -91,63 +120,32 @@ impl Component for FnKeyModel {
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let check_locked = gtk::CheckButton::new();
-        let check_normal = gtk::CheckButton::new();
-
-        check_normal.set_group(Some(&check_locked));
-
         let locked = AppConfig::load().active_profile().input_fn_key_locked;
-        if locked {
-            check_locked.set_active(true);
-        } else {
-            check_normal.set_active(true);
-        }
 
-        {
-            let sender = sender.clone();
-            check_locked.connect_toggled(move |b| {
-                if b.is_active() {
-                    sender.input(FnKeyMsg::ToggleLocked(true));
-                }
-            });
-        }
-        {
-            let sender = sender.clone();
-            check_normal.connect_toggled(move |b| {
-                if b.is_active() {
-                    sender.input(FnKeyMsg::ToggleLocked(false));
-                }
-            });
-        }
+        let cards_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .homogeneous(true)
+            .margin_top(8)
+            .margin_bottom(4)
+            .build();
 
-        let row_hint = adw::ActionRow::new();
-        row_hint.set_title(&t!("fn_key_hint_title"));
-        row_hint.set_subtitle(&t!("fn_key_hint_subtitle"));
-        row_hint.set_selectable(false);
-
-        let row_locked = adw::ActionRow::new();
-        row_locked.set_title(&t!("fn_key_locked_title"));
-        row_locked.set_subtitle(&t!("fn_key_locked_subtitle"));
-        row_locked.add_prefix(&check_locked);
-        row_locked.set_activatable_widget(Some(&check_locked));
-
-        let row_normal = adw::ActionRow::new();
-        row_normal.set_title(&t!("fn_key_normal_title"));
-        row_normal.set_subtitle(&t!("fn_key_normal_subtitle"));
-        row_normal.add_prefix(&check_normal);
-        row_normal.set_activatable_widget(Some(&check_normal));
+        let status_label = gtk::Label::new(Some(&t!("fn_key_hint_subtitle")));
+        status_label.add_css_class("caption");
+        status_label.add_css_class("dim-label");
+        status_label.set_halign(gtk::Align::Start);
+        status_label.set_margin_bottom(8);
+        status_label.set_margin_start(4);
 
         let model = FnKeyModel {
             locked,
             update_grub_available: false,
-            check_locked,
-            check_normal,
-            row_hint,
-            row_locked,
-            row_normal,
+            cards_box,
+            status_label,
         };
-
         let widgets = view_output!();
+
+        model.rebuild_cards(&sender);
 
         sender.command(|out, shutdown| {
             shutdown
@@ -163,10 +161,12 @@ impl Component for FnKeyModel {
 
     fn update(&mut self, msg: FnKeyMsg, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            FnKeyMsg::LoadProfile(locked) => {
+            FnKeyMsg::ToggleLocked(locked) => {
+                if locked == self.locked {
+                    return;
+                }
                 self.locked = locked;
-                self.check_locked.set_active(locked);
-                self.check_normal.set_active(!locked);
+                self.rebuild_cards(&sender);
 
                 let script = build_grub_script(locked);
                 sender.command(move |out, shutdown| {
@@ -180,11 +180,12 @@ impl Component for FnKeyModel {
                         .drop_on_shutdown()
                 });
             }
-            FnKeyMsg::ToggleLocked(locked) => {
+            FnKeyMsg::LoadProfile(locked) => {
                 if locked == self.locked {
                     return;
                 }
                 self.locked = locked;
+                self.rebuild_cards(&sender);
 
                 let script = build_grub_script(locked);
                 sender.command(move |out, shutdown| {
@@ -210,8 +211,7 @@ impl Component for FnKeyModel {
         match msg {
             FnKeyCommandOutput::UpdateGrubChecked(ok) => {
                 self.update_grub_available = ok;
-                self.row_locked.set_sensitive(ok);
-                self.row_normal.set_sensitive(ok);
+                self.rebuild_cards(&sender);
             }
             FnKeyCommandOutput::Set(locked) => {
                 AppConfig::update(|c| c.active_profile_mut().input_fn_key_locked = locked);
@@ -220,13 +220,47 @@ impl Component for FnKeyModel {
                 } else {
                     t!("fn_key_mode_normal")
                 };
-                self.row_hint.set_subtitle(&t!("fn_key_saved", mode = mode));
+                self.status_label
+                    .set_label(&t!("fn_key_saved", mode = mode));
             }
             FnKeyCommandOutput::Error(e) => {
-                self.row_hint
-                    .set_subtitle(&t!("fn_key_save_error", error = e.clone()));
+                self.status_label
+                    .set_label(&t!("fn_key_save_error", error = e.clone()));
                 let _ = sender.output(e);
             }
         }
+    }
+}
+
+impl FnKeyModel {
+    fn rebuild_cards(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.cards_box.first_child() {
+            self.cards_box.remove(&child);
+        }
+
+        let avail = self.update_grub_available;
+        let locked = self.locked;
+
+        let locked_card = fn_mode_card(
+            "input-keyboard-symbolic",
+            &t!("fn_key_locked_title"),
+            &t!("fn_key_locked_desc"),
+            locked,
+            avail,
+            sender.clone(),
+            true,
+        );
+        let normal_card = fn_mode_card(
+            "go-home-symbolic",
+            &t!("fn_key_normal_title"),
+            &t!("fn_key_normal_desc"),
+            !locked,
+            avail,
+            sender.clone(),
+            false,
+        );
+
+        self.cards_box.append(&locked_card);
+        self.cards_box.append(&normal_card);
     }
 }
