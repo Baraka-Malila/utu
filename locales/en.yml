@@ -407,3 +407,17 @@ gpu_restart_title: "Restart Display Server?"
 gpu_restart_body: "The GPU mode has changed. Restarting GDM3 will log you out and apply the new mode immediately."
 gpu_restart_now: "Restart Now"
 gpu_restart_later: "Later"
+
+# thermal profile (mode cards on system page)
+thermal_profile_group_title: "Thermal Profile"
+thermal_profile_quiet_name: "Quiet"
+thermal_profile_quiet_desc: "35W TDP · Low fan · Silent work"
+thermal_profile_balanced_name: "Balanced"
+thermal_profile_balanced_desc: "45W TDP · Auto fan · Daily use"
+thermal_profile_performance_name: "Performance"
+thermal_profile_performance_desc: "65W TDP · Boost fan · Max performance"
+
+# asus key section (moved from keyboard page to system page)
+asus_key_group_title: "ASUS Key"
+asus_key_enable_title: "Armoury Key opens utu"
+asus_key_input_group_missing: "The 'input' group is required to listen for the Armoury Key.\nRun: sudo usermod -aG input $USER  then log out and back in.\nAlternatively: GNOME Settings → Keyboard → Custom Shortcuts → bind 'utu'."

@@ -19,3 +19,5 @@ pub mod battery;
 pub mod fan;
 pub mod fan_osd;
 pub mod gpu;
+pub mod thermal_profile;
+pub use thermal_profile::ThermalProfileModel;

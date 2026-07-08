@@ -47,6 +47,9 @@ use crate::components::system::apu_mem::ApuMemModel;
 use crate::components::system::battery::BatteryModel;
 use crate::components::system::fan::FanModel;
 use crate::components::system::gpu::GpuModel;
+use crate::components::system::ThermalProfileModel;
+use crate::components::system::thermal_profile::ThermalProfileMsg;
+use crate::components::widgets::section_divider;
 use crate::search::nav_items;
 use crate::tray;
 use relm4::adw;
@@ -134,6 +137,7 @@ pub struct AppModel {
     battery: Controller<BatteryModel>,
     fan: Controller<FanModel>,
     gpu: Controller<GpuModel>,
+    thermal_profile: Controller<ThermalProfileModel>,
     oled_dimming: Controller<OledDimmingModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
@@ -208,6 +212,7 @@ impl AppModel {
         self.battery.sender().emit(BatteryMsg::LoadProfile(p.battery_deep_sleep_active));
         self.gpu.sender().emit(GpuMsg::LoadProfile(p.gpu_mode));
         self.apu_mem.sender().emit(ApuMemMsg::LoadProfile(p.apu_mem));
+        self.thermal_profile.sender().emit(ThermalProfileMsg::LoadProfile(FanProfile::from(p.fan_profile)));
     }
 }
 
@@ -330,6 +335,7 @@ impl SimpleComponent for AppModel {
         let battery = launch_component!(BatteryModel, sender);
         let fan = launch_component!(FanModel, sender);
         let gpu = launch_component!(GpuModel, sender);
+        let thermal_profile = launch_component!(ThermalProfileModel, sender);
         let oled_dimming = launch_component!(OledDimmingModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
@@ -412,6 +418,7 @@ impl SimpleComponent for AppModel {
             battery,
             fan,
             gpu,
+            thermal_profile,
             oled_dimming,
             aura,
             animatrix,
@@ -428,8 +435,10 @@ impl SimpleComponent for AppModel {
         let home_widget = model.home.widget();
         let apu_mem_widget = model.apu_mem.widget();
         let battery_widget = model.battery.widget();
-        let fan_widget = model.fan.widget();
         let gpu_widget = model.gpu.widget();
+        let thermal_profile_widget = model.thermal_profile.widget();
+        // fan_widget is not placed on any page — FanModel runs for hotkey-only.
+        let _fan_widget = model.fan.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
@@ -478,9 +487,6 @@ impl SimpleComponent for AppModel {
         keyboard_page.add(backlight_idle_widget);
         keyboard_page.add(fn_key_widget);
 
-        let asus_key_hint_group = build_asus_key_hint_group(fan_hotkey_tx);
-        keyboard_page.add(&asus_key_hint_group);
-
         let touchpad_page = adw::PreferencesPage::new();
         touchpad_page.add(touchpad_widget);
         touchpad_page.add(numberpad_widget);
@@ -490,17 +496,41 @@ impl SimpleComponent for AppModel {
         audio_page.add(volume_widget);
         audio_page.add(sound_modes_widget);
 
-        let system_page = adw::PreferencesPage::new();
-        system_page.add(battery_widget);
-        system_page.add(fan_widget);
-        system_page.add(gpu_widget);
-        system_page.add(apu_mem_widget);
-
+        // System page — ScrolledWindow+Box for full layout control (mode cards
+        // and pill strips can't be children of adw::PreferencesPage directly).
+        let asus_key_hint_group = build_asus_key_hint_group(fan_hotkey_tx);
         let lang_group = build_language_and_autostart_group(&sender);
-        system_page.add(&lang_group);
-
         let legacy_group = build_legacy_migration_group(&sender);
-        system_page.add(&legacy_group);
+
+        let system_inner = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(12)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+        system_inner.append(&section_divider(&t!("thermal_profile_group_title")));
+        system_inner.append(thermal_profile_widget);
+        system_inner.append(&section_divider(&t!("gpu_group_title")));
+        system_inner.append(gpu_widget);
+        system_inner.append(&section_divider(&t!("apu_mem_group_title")));
+        system_inner.append(apu_mem_widget);
+        system_inner.append(battery_widget);
+        system_inner.append(&asus_key_hint_group);
+        system_inner.append(&lang_group);
+        system_inner.append(&legacy_group);
+
+        let system_clamp = adw::Clamp::builder()
+            .maximum_size(600)
+            .tightening_threshold(400)
+            .child(&system_inner)
+            .build();
+        let system_page = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vexpand(true)
+            .child(&system_clamp)
+            .build();
 
         // Widget map for scroll-to-widget
 
@@ -531,7 +561,6 @@ impl SimpleComponent for AppModel {
             ),
             ("apu_mem", apu_mem_widget.clone().upcast::<gtk4::Widget>()),
             ("battery", battery_widget.clone().upcast::<gtk4::Widget>()),
-            ("fan", fan_widget.clone().upcast::<gtk4::Widget>()),
             (
                 "asus_key_hint",
                 asus_key_hint_group.clone().upcast::<gtk4::Widget>(),

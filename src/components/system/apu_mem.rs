@@ -1,5 +1,5 @@
-// Ayuz - Unofficial Control Center for Asus Laptops
-// Copyright (C) 2026 Guido Philipp
+// Utu - ASUS Laptop Control Centre for Ubuntu
+// Copyright (C) 2026 Guido Philipp, Baraka Malila
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,17 +15,13 @@
 // along with this program.  If not, see https://www.gnu.org/licenses/.
 
 use gtk4 as gtk;
-use relm4::adw;
-use relm4::adw::prelude::*;
+use gtk4::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
 
 use crate::services::config::AppConfig;
 use crate::services::dbus;
 
-/// Returns the display label for an APU memory value.
-///
-/// `0` maps to the localised "Auto" string; any positive value maps to `"N GB"`.
 fn label_for_value(v: i32) -> String {
     if v == 0 {
         t!("apu_mem_value_auto").to_string()
@@ -34,37 +30,53 @@ fn label_for_value(v: i32) -> String {
     }
 }
 
-/// State for the APU memory (UMA frame buffer) settings component.
-pub struct ApuMemModel {
-    /// `true` once the daemon confirms this attribute is available; controls sensitivity.
-    available: bool,
-    /// The currently applied value, used to suppress no-op callback invocations.
-    current_value: i32,
-    /// The allowed values returned by `possible_values`, used to resolve dropdown indices.
-    display_options: Vec<i32>,
-    /// Stored reference so `update_cmd` can imperatively update the model and selection.
-    combo_row: adw::ComboRow,
+fn pill_strip(options: &[&str]) -> (gtk::Box, Vec<gtk::ToggleButton>) {
+    let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    hbox.add_css_class("pill-strip");
+    hbox.add_css_class("linked");
+    let mut btns: Vec<gtk::ToggleButton> = Vec::new();
+    for &opt in options {
+        let btn = gtk::ToggleButton::with_label(opt);
+        hbox.append(&btn);
+        btns.push(btn);
+    }
+    // Radio-group: deactivate all others when one is toggled on.
+    for i in 0..btns.len() {
+        let others: Vec<gtk::ToggleButton> = btns
+            .iter()
+            .enumerate()
+            .filter(|&(j, _)| j != i)
+            .map(|(_, b)| b.clone())
+            .collect();
+        btns[i].connect_toggled(move |b| {
+            if b.is_active() {
+                for o in &others {
+                    o.set_active(false);
+                }
+            }
+        });
+    }
+    (hbox, btns)
 }
 
-/// Input messages for the APU memory component.
+pub struct ApuMemModel {
+    available: bool,
+    current_value: i32,
+    display_options: Vec<i32>,
+    pill_btns: Vec<gtk::ToggleButton>,
+}
+
 #[derive(Debug)]
 pub enum ApuMemMsg {
-    /// User selected index `idx` in the memory size dropdown.
-    ChangeValue(u32),
-    /// Apply APU memory value from a profile without saving.
+    ChangeValue(usize),
     LoadProfile(i32),
 }
 
-/// Async command results for the APU memory component.
 #[derive(Debug)]
 pub enum ApuMemCommandOutput {
-    /// asusd is offline or the BIOS does not expose the `apu_mem` attribute.
     NotAvailable,
-    /// Initial options and current value successfully read from the daemon.
     Init(Vec<i32>, i32),
-    /// Confirmation that `SetCurrentValue` succeeded; carries the applied value.
     ValueSet(i32),
-    /// An error message to forward as a toast notification.
     Error(String),
 }
 
@@ -76,69 +88,61 @@ impl Component for ApuMemModel {
     type CommandOutput = ApuMemCommandOutput;
 
     view! {
-        adw::PreferencesGroup {
-            set_title: &t!("apu_mem_group_title"),
-            set_description: Some(&t!("apu_mem_group_desc")),
+        gtk::Box {
+            set_orientation: gtk::Orientation::Vertical,
+            set_spacing: 8,
 
-            #[template]
-            add = &crate::components::widgets::DaemonWarningLabel {
-                #[watch]
-                set_visible: !model.available,
-                set_label: &t!("apu_mem_not_supported_warning"),
+            append = &gtk::Label {
+                set_label: &t!("apu_mem_group_title"),
+                set_halign: gtk::Align::Start,
+                add_css_class: "body",
             },
 
-            add = &model.combo_row.clone() -> adw::ComboRow {
-                set_title: &t!("apu_mem_title"),
-                set_subtitle: &t!("apu_mem_subtitle"),
-
-                #[watch]
-                set_sensitive: model.available,
-            },
-
-            add = &gtk::Label {
-                set_label: &t!("apu_mem_reboot_warning"),
+            append = &gtk::Label {
+                set_label: &t!("apu_mem_subtitle"),
+                set_halign: gtk::Align::Start,
+                add_css_class: "caption",
                 add_css_class: "dim-label",
                 set_wrap: true,
-                set_xalign: 0.0,
-                set_margin_top: 8,
-                set_margin_start: 12,
-                set_margin_end: 12,
-                set_margin_bottom: 4,
             },
         }
     }
 
     fn init(
         _init: Self::Init,
-        _root: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let combo_row = adw::ComboRow::new();
-
-        combo_row.connect_selected_notify({
-            let sender = sender.clone();
-            move |row| {
-                sender.input(ApuMemMsg::ChangeValue(row.selected()));
-            }
-        });
-
         let saved_value = AppConfig::load().active_profile().apu_mem;
 
-        // Set a placeholder model so the ComboRow always renders,
-        // even before the daemon responds or when it is unavailable.
-        combo_row.set_model(Some(&gtk::StringList::new(&[&label_for_value(saved_value)])));
+        // Build pill strip with a placeholder label until daemon responds.
+        let labels = [label_for_value(saved_value)];
+        let label_refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+        let (strip, pill_btns) = pill_strip(&label_refs);
+        if let Some(btn) = pill_btns.first() {
+            btn.set_active(true);
+        }
+        // Wire each button to emit ChangeValue(index).
+        for (i, btn) in pill_btns.iter().enumerate() {
+            let sender = sender.clone();
+            btn.connect_toggled(move |b| {
+                if b.is_active() {
+                    sender.input(ApuMemMsg::ChangeValue(i));
+                }
+            });
+        }
+        strip.set_sensitive(false);
+        root.append(&strip);
 
         let model = ApuMemModel {
             available: false,
             current_value: saved_value,
             display_options: Vec::new(),
-            combo_row,
+            pill_btns,
         };
 
         let widgets = view_output!();
 
-        // Single command: try to read options. If this fails for any reason
-        // (asusd offline, BIOS doesn't expose apu_mem), leave the group disabled.
         sender.command(|out, shutdown| {
             shutdown
                 .register(async move {
@@ -171,9 +175,7 @@ impl Component for ApuMemModel {
                     return;
                 }
                 self.current_value = value;
-                if let Some(idx) = self.display_options.iter().position(|&v| v == value) {
-                    self.combo_row.set_selected(idx as u32);
-                }
+                self.sync_pill_selection(value);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
@@ -186,7 +188,7 @@ impl Component for ApuMemModel {
                 });
             }
             ApuMemMsg::ChangeValue(idx) => {
-                let Some(&value) = self.display_options.get(idx as usize) else {
+                let Some(&value) = self.display_options.get(idx) else {
                     return;
                 };
                 if value == self.current_value {
@@ -213,28 +215,19 @@ impl Component for ApuMemModel {
         &mut self,
         msg: ApuMemCommandOutput,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
         match msg {
             ApuMemCommandOutput::NotAvailable => {
-                // available stays false; group is visible but combo row is disabled
+                // Keep strip disabled and visible — shows "not supported on this device"
             }
             ApuMemCommandOutput::Init(options, current) => {
                 self.available = true;
                 self.display_options = options;
                 self.current_value = current;
 
-                let translated: Vec<String> =
-                    self.display_options.iter().map(|&v| label_for_value(v)).collect();
-                let str_refs: Vec<&str> = translated.iter().map(|s| s.as_str()).collect();
-                self.combo_row.set_model(Some(&gtk::StringList::new(&str_refs)));
-
-                let idx = self
-                    .display_options
-                    .iter()
-                    .position(|&v| v == current)
-                    .unwrap_or(0) as u32;
-                self.combo_row.set_selected(idx);
+                // Rebuild pill strip with the real options.
+                self.rebuild_strip(root, &sender);
             }
             ApuMemCommandOutput::ValueSet(v) => {
                 tracing::info!("{}", t!("apu_mem_set", value = label_for_value(v)));
@@ -242,6 +235,62 @@ impl Component for ApuMemModel {
             ApuMemCommandOutput::Error(e) => {
                 let _ = sender.output(e);
             }
+        }
+    }
+}
+
+impl ApuMemModel {
+    fn sync_pill_selection(&self, value: i32) {
+        if let Some(idx) = self.display_options.iter().position(|&v| v == value) {
+            for (i, btn) in self.pill_btns.iter().enumerate() {
+                btn.set_active(i == idx);
+            }
+        }
+    }
+
+    fn rebuild_strip(&mut self, root: &gtk::Box, sender: &ComponentSender<Self>) {
+        // Remove any existing strip (last child after the two labels).
+        // Labels are at indices 0 and 1; the strip is at 2 if it exists.
+        let children: Vec<_> = {
+            let mut v = Vec::new();
+            let mut child = root.first_child();
+            while let Some(c) = child {
+                child = c.next_sibling();
+                v.push(c);
+            }
+            v
+        };
+        // Remove everything after the first two label widgets.
+        for c in children.into_iter().skip(2) {
+            root.remove(&c);
+        }
+
+        let labels: Vec<String> = self.display_options.iter().map(|&v| label_for_value(v)).collect();
+        let label_refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+        let (strip, btns) = pill_strip(&label_refs);
+        strip.set_sensitive(self.available);
+
+        // Wire callbacks with new indices.
+        for (i, btn) in btns.iter().enumerate() {
+            let sender = sender.clone();
+            btn.connect_toggled(move |b| {
+                if b.is_active() {
+                    sender.input(ApuMemMsg::ChangeValue(i));
+                }
+            });
+        }
+
+        self.pill_btns = btns;
+        self.sync_pill_selection(self.current_value);
+        root.append(&strip);
+
+        if self.available {
+            let note = gtk::Label::new(Some(&t!("apu_mem_reboot_warning")));
+            note.add_css_class("caption");
+            note.add_css_class("dim-label");
+            note.set_wrap(true);
+            note.set_xalign(0.0);
+            root.append(&note);
         }
     }
 }
