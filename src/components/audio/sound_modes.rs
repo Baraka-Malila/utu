@@ -51,7 +51,7 @@ pub struct SoundModesModel {
     ee_installed: bool,
     current_profile: u32,
     previous_profile: u32,
-    dropdown: gtk::DropDown,
+    cards_box: gtk::FlowBox,
 }
 
 #[derive(Debug)]
@@ -90,13 +90,7 @@ impl Component for SoundModesModel {
                 set_label: &t!("ee_missing_warning"),
             },
 
-            add = &adw::ActionRow {
-                set_title: &t!("audio_profile_label"),
-                add_suffix = &model.dropdown.clone(),
-                set_activatable_widget: Some(&model.dropdown),
-                #[watch]
-                set_sensitive: model.ee_installed,
-            },
+            add = &model.cards_box.clone(),
         }
     }
 
@@ -107,35 +101,27 @@ impl Component for SoundModesModel {
     ) -> ComponentParts<Self> {
         let config = AppConfig::load();
 
-        let options = gtk::StringList::new(&[
-            &t!("audio_profile_film"),
-            &t!("audio_profile_music"),
-            &t!("audio_profile_none"),
-            &t!("audio_profile_optimized"),
-            &t!("audio_profile_video"),
-            &t!("audio_profile_voice"),
-            &t!("audio_profile_custom"),
-        ]);
-        let dropdown = gtk::DropDown::new(Some(options), gtk::Expression::NONE);
-        dropdown.set_valign(gtk::Align::Center);
         let saved_audio = config.active_profile().audio_profile;
-        dropdown.set_selected(saved_audio);
 
-        {
-            let sender = sender.clone();
-            dropdown.connect_selected_notify(move |dd| {
-                sender.input(SoundModesMsg::ChangeProfile(dd.selected()));
-            });
-        }
+        let cards_box = gtk::FlowBox::new();
+        cards_box.set_max_children_per_line(3);
+        cards_box.set_min_children_per_line(1);
+        cards_box.set_selection_mode(gtk::SelectionMode::None);
+        cards_box.set_column_spacing(8);
+        cards_box.set_row_spacing(8);
+        cards_box.set_margin_top(8);
+        cards_box.set_margin_bottom(8);
+        cards_box.set_homogeneous(true);
 
         let model = SoundModesModel {
             ee_installed: false,
             current_profile: saved_audio,
             previous_profile: saved_audio,
-            dropdown,
+            cards_box,
         };
 
         let widgets = view_output!();
+        model.rebuild_cards(&sender);
 
         sender.command(move |out, shutdown| {
             shutdown
@@ -244,7 +230,7 @@ impl Component for SoundModesModel {
 
             SoundModesMsg::CustomCancelled(previous) => {
                 self.current_profile = previous;
-                self.dropdown.set_selected(previous);
+                self.rebuild_cards(&sender);
                 AppConfig::update(|c| c.active_profile_mut().audio_profile = previous);
             }
             SoundModesMsg::LoadProfile(idx) => {
@@ -252,7 +238,7 @@ impl Component for SoundModesModel {
                     return;
                 }
                 self.current_profile = idx;
-                self.dropdown.set_selected(idx);
+                self.rebuild_cards(&sender);
                 sender.command(move |out, shutdown| {
                     shutdown
                         .register(async move {
@@ -277,6 +263,7 @@ impl Component for SoundModesModel {
         match msg {
             AudioCommandOutput::EeChecked(installed) => {
                 self.ee_installed = installed;
+                self.rebuild_cards(&sender);
             }
             AudioCommandOutput::PresetsInstalled => {}
             AudioCommandOutput::ProfileSet(idx) => {
@@ -290,6 +277,79 @@ impl Component for SoundModesModel {
             }
         }
     }
+}
+
+impl SoundModesModel {
+    fn rebuild_cards(&self, sender: &ComponentSender<Self>) {
+        while let Some(child) = self.cards_box.first_child() {
+            self.cards_box.remove(&child);
+        }
+
+        const PROFILES: &[(&str, &str, u32)] = &[
+            ("camera-video-symbolic", "audio_profile_film", 0),
+            ("audio-headphones-symbolic", "audio_profile_music", 1),
+            ("audio-volume-muted-symbolic", "audio_profile_none", 2),
+            ("media-equalizer-symbolic", "audio_profile_optimized", 3),
+            ("video-display-symbolic", "audio_profile_video", 4),
+            ("audio-input-microphone-symbolic", "audio_profile_voice", 5),
+            ("document-open-symbolic", "audio_profile_custom", 6),
+        ];
+
+        for &(icon, key, idx) in PROFILES {
+            let card = sound_mode_card(
+                icon,
+                &t!(key),
+                idx == self.current_profile,
+                self.ee_installed,
+                sender.clone(),
+                idx,
+            );
+            self.cards_box.append(&card);
+        }
+    }
+}
+
+fn sound_mode_card(
+    icon: &str,
+    name: &str,
+    active: bool,
+    sensitive: bool,
+    sender: ComponentSender<SoundModesModel>,
+    idx: u32,
+) -> gtk::Button {
+    let icon_w = gtk::Image::from_icon_name(icon);
+    icon_w.set_pixel_size(32);
+
+    let name_l = gtk::Label::new(Some(name));
+    name_l.add_css_class("caption");
+    name_l.set_halign(gtk::Align::Center);
+    name_l.set_wrap(true);
+    name_l.set_max_width_chars(10);
+
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(8)
+        .margin_end(8)
+        .halign(gtk::Align::Center)
+        .build();
+    inner.append(&icon_w);
+    inner.append(&name_l);
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&inner));
+    btn.add_css_class("flat");
+    btn.add_css_class("mode-card");
+    btn.set_sensitive(sensitive);
+    if active {
+        btn.add_css_class("mode-card-active");
+    }
+    btn.connect_clicked(move |_| {
+        sender.input(SoundModesMsg::ChangeProfile(idx));
+    });
+    btn
 }
 
 async fn ensure_easyeffects_running() {
