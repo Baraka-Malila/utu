@@ -49,6 +49,8 @@ use crate::components::system::fan::FanModel;
 use crate::components::system::gpu::GpuModel;
 use crate::components::system::ThermalProfileModel;
 use crate::components::system::thermal_profile::ThermalProfileMsg;
+use crate::components::system::ChargeLimit;
+use crate::components::system::BatteryHealth;
 use crate::components::widgets::section_divider;
 use crate::search::nav_items;
 use crate::tray;
@@ -135,6 +137,8 @@ pub struct AppModel {
     home: Controller<HomeModel>,
     apu_mem: Controller<ApuMemModel>,
     battery: Controller<BatteryModel>,
+    charge_limit: Controller<ChargeLimit>,
+    battery_health: Controller<BatteryHealth>,
     fan: Controller<FanModel>,
     gpu: Controller<GpuModel>,
     thermal_profile: Controller<ThermalProfileModel>,
@@ -333,6 +337,8 @@ impl SimpleComponent for AppModel {
             });
         let apu_mem = launch_component!(ApuMemModel, sender);
         let battery = launch_component!(BatteryModel, sender);
+        let charge_limit = launch_component!(ChargeLimit, sender);
+        let battery_health = launch_component!(BatteryHealth, sender);
         let fan = launch_component!(FanModel, sender);
         let gpu = launch_component!(GpuModel, sender);
         let thermal_profile = launch_component!(ThermalProfileModel, sender);
@@ -416,6 +422,8 @@ impl SimpleComponent for AppModel {
             home,
             apu_mem,
             battery,
+            charge_limit,
+            battery_health,
             fan,
             gpu,
             thermal_profile,
@@ -437,6 +445,8 @@ impl SimpleComponent for AppModel {
         let battery_widget = model.battery.widget();
         let gpu_widget = model.gpu.widget();
         let thermal_profile_widget = model.thermal_profile.widget();
+        let charge_limit_widget = model.charge_limit.widget();
+        let battery_health_widget = model.battery_health.widget();
         // fan_widget is not placed on any page — FanModel runs for hotkey-only.
         let _fan_widget = model.fan.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
@@ -516,7 +526,6 @@ impl SimpleComponent for AppModel {
         system_inner.append(gpu_widget);
         system_inner.append(&section_divider(&t!("apu_mem_group_title")));
         system_inner.append(apu_mem_widget);
-        system_inner.append(battery_widget);
         system_inner.append(&asus_key_hint_group);
         system_inner.append(&lang_group);
         system_inner.append(&legacy_group);
@@ -585,9 +594,12 @@ impl SimpleComponent for AppModel {
         content_stack.add_named(&audio_page, Some(AppPage::Audio.as_str()));
         content_stack.add_named(&system_page, Some(AppPage::System.as_str()));
 
-        // Placeholder pages for new nav items (Phase 4 — content added per-task)
-        let battery_placeholder = adw::PreferencesPage::new();
-        content_stack.add_named(&battery_placeholder, Some(AppPage::Battery.as_str()));
+        // Battery page
+        let battery_page = adw::PreferencesPage::new();
+        battery_page.add(charge_limit_widget);
+        battery_page.add(battery_widget);
+        battery_page.add(battery_health_widget);
+        content_stack.add_named(&battery_page, Some(AppPage::Battery.as_str()));
         let appearance_placeholder = adw::PreferencesPage::new();
         content_stack.add_named(&appearance_placeholder, Some(AppPage::Appearance.as_str()));
         let about_placeholder = adw::PreferencesPage::new();

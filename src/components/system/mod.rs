@@ -16,8 +16,12 @@
 
 pub mod apu_mem;
 pub mod battery;
+pub mod battery_health;
+pub mod charge_limit;
 pub mod fan;
 pub mod fan_osd;
 pub mod gpu;
 pub mod thermal_profile;
 pub use thermal_profile::ThermalProfileModel;
+pub use charge_limit::ChargeLimit;
+pub use battery_health::BatteryHealth;
