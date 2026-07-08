@@ -35,6 +35,7 @@ use crate::components::system::fan::FanMsg;
 use crate::components::system::gpu::GpuMsg;
 use crate::services::dbus::FanProfile;
 use crate::components::animatrix::{AnimatrixModel, AnimatrixMsg};
+use crate::components::AppearanceModel;
 use crate::components::aura::AuraPageModel;
 use crate::components::aura::AuraPageMsg;
 use crate::components::keyboard::AutoBacklightModel;
@@ -143,6 +144,7 @@ pub struct AppModel {
     gpu: Controller<GpuModel>,
     thermal_profile: Controller<ThermalProfileModel>,
     oled_dimming: Controller<OledDimmingModel>,
+    appearance: Controller<AppearanceModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
     fn_key: Controller<FnKeyModel>,
@@ -341,6 +343,7 @@ impl SimpleComponent for AppModel {
         let gpu = launch_component!(GpuModel, sender);
         let thermal_profile = launch_component!(ThermalProfileModel, sender);
         let oled_dimming = launch_component!(OledDimmingModel, sender);
+        let appearance = launch_component!(AppearanceModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
         let fn_key = launch_component!(FnKeyModel, sender);
@@ -426,6 +429,7 @@ impl SimpleComponent for AppModel {
             gpu,
             thermal_profile,
             oled_dimming,
+            appearance,
             aura,
             animatrix,
             fn_key,
@@ -448,6 +452,7 @@ impl SimpleComponent for AppModel {
         // fan_widget is not placed on any page — FanModel runs for hotkey-only.
         let _fan_widget = model.fan.widget();
         let oled_dimming_widget = model.oled_dimming.widget();
+        let appearance_widget = model.appearance.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
         let fn_key_widget = model.fn_key.widget();
@@ -598,8 +603,7 @@ impl SimpleComponent for AppModel {
         battery_page.add(battery_widget);
         battery_page.add(battery_health_widget);
         content_stack.add_named(&battery_page, Some(AppPage::Battery.as_str()));
-        let appearance_placeholder = adw::PreferencesPage::new();
-        content_stack.add_named(&appearance_placeholder, Some(AppPage::Appearance.as_str()));
+        content_stack.add_named(appearance_widget, Some(AppPage::Appearance.as_str()));
         let about_placeholder = adw::PreferencesPage::new();
         content_stack.add_named(&about_placeholder, Some(AppPage::About.as_str()));
         let hardware_placeholder = adw::PreferencesPage::new();

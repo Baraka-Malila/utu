@@ -222,6 +222,8 @@ pub struct AppConfig {
     // ── Global (non-profile) settings ────────────────────────────────────────
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_accent")]
+    pub accent_hex: String,
     #[serde(default)]
     pub skip_legacy_migration: bool,
     #[serde(default = "default_true", alias = "show_fan_osd")]
@@ -236,10 +238,15 @@ pub struct AppConfig {
     pub profiles: Vec<Profile>,
 }
 
+fn default_accent() -> String {
+    "#e8a800".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             language: default_language(),
+            accent_hex: default_accent(),
             skip_legacy_migration: false,
             fan_osd_enabled: true,
             fan_hotkey_enabled: true,

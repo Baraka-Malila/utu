@@ -17,6 +17,7 @@
 pub mod widgets;
 
 pub mod animatrix;
+pub mod appearance;
 pub mod audio;
 pub mod aura;
 pub mod display;
@@ -24,3 +25,5 @@ pub mod home;
 pub mod keyboard;
 pub mod system;
 pub mod touchpad;
+
+pub use appearance::AppearanceModel;
