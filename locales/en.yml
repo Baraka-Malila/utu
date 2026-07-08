@@ -432,3 +432,10 @@ battery_health_loading: "Collecting health data…"
 battery_health_insufficient: "Check back in a few weeks to see your trend."
 battery_health_summary: "Current: %{pct}% · Design: %{design} Wh · Now: %{now} Wh"
 battery_one_shot_label: "Charge to 100% once"
+
+# display page
+display_gnome_banner: "Panel autohide and transparency require KDE Plasma or COSMIC"
+display_panel_title: "Panel"
+display_target_mode_title: "Target Display Mode"
+display_color_gamut_title: "Colour Gamut"
+display_gnome_disabled_note: "(Not available on GNOME)"
