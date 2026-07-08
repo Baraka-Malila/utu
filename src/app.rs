@@ -36,6 +36,7 @@ use crate::components::system::gpu::GpuMsg;
 use crate::services::dbus::FanProfile;
 use crate::components::animatrix::{AnimatrixModel, AnimatrixMsg};
 use crate::components::about::AboutModel;
+use crate::components::hardware::HardwareModel;
 use crate::components::AppearanceModel;
 use crate::components::aura::AuraPageModel;
 use crate::components::aura::AuraPageMsg;
@@ -149,6 +150,7 @@ pub struct AppModel {
     oled_dimming: Controller<OledDimmingModel>,
     appearance: Controller<AppearanceModel>,
     about: Controller<AboutModel>,
+    hardware: Controller<HardwareModel>,
     aura: Controller<AuraPageModel>,
     animatrix: Controller<AnimatrixModel>,
     fn_key: Controller<FnKeyModel>,
@@ -359,6 +361,7 @@ impl SimpleComponent for AppModel {
         let oled_dimming = launch_component!(OledDimmingModel, sender);
         let appearance = launch_component!(AppearanceModel, sender);
         let about = launch_component!(AboutModel, sender);
+        let hardware = launch_component!(HardwareModel, sender);
         let aura = launch_component!(AuraPageModel, sender);
         let animatrix = launch_component!(AnimatrixModel, sender);
         let fn_key = launch_component!(FnKeyModel, sender);
@@ -448,6 +451,7 @@ impl SimpleComponent for AppModel {
             oled_dimming,
             appearance,
             about,
+            hardware,
             aura,
             animatrix,
             fn_key,
@@ -472,6 +476,7 @@ impl SimpleComponent for AppModel {
         let oled_dimming_widget = model.oled_dimming.widget();
         let appearance_widget = model.appearance.widget();
         let about_widget = model.about.widget();
+        let hardware_widget = model.hardware.widget();
         let aura_widget = model.aura.widget();
         let animatrix_widget = model.animatrix.widget();
         let fn_key_widget = model.fn_key.widget();
@@ -624,8 +629,7 @@ impl SimpleComponent for AppModel {
         content_stack.add_named(&battery_page, Some(AppPage::Battery.as_str()));
         content_stack.add_named(appearance_widget, Some(AppPage::Appearance.as_str()));
         content_stack.add_named(about_widget, Some(AppPage::About.as_str()));
-        let hardware_placeholder = adw::PreferencesPage::new();
-        content_stack.add_named(&hardware_placeholder, Some(AppPage::Hardware.as_str()));
+        content_stack.add_named(hardware_widget, Some(AppPage::Hardware.as_str()));
 
         content_stack.set_visible_child_name(AppPage::Home.as_str());
 

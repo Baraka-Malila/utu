@@ -19,6 +19,7 @@ pub mod widgets;
 pub mod animatrix;
 pub mod about;
 pub mod appearance;
+pub mod hardware;
 pub mod audio;
 pub mod aura;
 pub mod display;
