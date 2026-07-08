@@ -22,30 +22,27 @@ use std::rc::Rc;
 
 const SCROLL_ANIMATION_DELAY_MS: u64 = 150;
 
-// (icon, i18n-key, stack-name)
-pub const NAV_ITEMS: [(&str, &str, &str); 8] = [
-    ("go-home-symbolic", "tab_home", "home"),
-    ("video-display-symbolic", "tab_display", "display"),
-    ("input-keyboard-symbolic", "tab_keyboard", "keyboard"),
-    ("preferences-color-symbolic", "tab_aura", "aura"),
-    ("view-grid-symbolic", "tab_animatrix", "animatrix"),
-    ("input-touchpad-symbolic", "tab_touchpad", "touchpad"),
-    ("audio-headset-symbolic", "tab_audio", "audio"),
-    ("preferences-system-symbolic", "tab_system", "system"),
+// Fixed display order — group label shown above row at index:
+//   1 → CONTROL (System, Battery)
+//   3 → DISPLAY & INPUT (Display, Keyboard, Touchpad)
+//   6 → FEATURES (Lighting, Audio, AniMatrix)
+//   9 → SETTINGS (Appearance, About)
+pub const NAV_ITEMS: [(&str, &str, &str); 11] = [
+    ("go-home-symbolic",                       "tab_home",       "home"),
+    ("preferences-system-symbolic",            "tab_system",     "system"),
+    ("battery-symbolic",                       "tab_battery",    "battery"),
+    ("video-display-symbolic",                 "tab_display",    "display"),
+    ("input-keyboard-symbolic",                "tab_keyboard",   "keyboard"),
+    ("input-touchpad-symbolic",                "tab_touchpad",   "touchpad"),
+    ("preferences-color-symbolic",             "tab_lighting",   "lighting"),
+    ("audio-headset-symbolic",                 "tab_audio",      "audio"),
+    ("view-grid-symbolic",                     "tab_animatrix",  "animatrix"),
+    ("preferences-desktop-appearance-symbolic","tab_appearance", "appearance"),
+    ("help-about-symbolic",                    "tab_about",      "about"),
 ];
 
-pub fn sorted_nav_items() -> Vec<(&'static str, &'static str, &'static str)> {
-    let mut items: Vec<_> = NAV_ITEMS.iter().copied().collect();
-    // Home is always pinned first; the rest are sorted alphabetically.
-    let home_pos = items.iter().position(|&(_, _, n)| n == "home");
-    if let Some(idx) = home_pos {
-        let home = items.remove(idx);
-        items.sort_by(|a, b| t!(a.1).as_ref().cmp(t!(b.1).as_ref()));
-        items.insert(0, home);
-    } else {
-        items.sort_by(|a, b| t!(a.1).as_ref().cmp(t!(b.1).as_ref()));
-    }
-    items
+pub fn nav_items() -> &'static [(&'static str, &'static str, &'static str)] {
+    &NAV_ITEMS
 }
 
 struct SearchItem {

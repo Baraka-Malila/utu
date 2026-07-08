@@ -47,13 +47,12 @@ use crate::components::system::apu_mem::ApuMemModel;
 use crate::components::system::battery::BatteryModel;
 use crate::components::system::fan::FanModel;
 use crate::components::system::gpu::GpuModel;
-use crate::search::sorted_nav_items;
+use crate::search::nav_items;
 use crate::tray;
 use relm4::adw;
 use relm4::adw::prelude::*;
 use relm4::prelude::*;
 use rust_i18n::t;
-use std::rc::Rc;
 
 /// Builds a Linux *abstract* (per-user-namespace) Unix socket address with the
 /// given name. Returns None on non-Linux platforms where abstract sockets
@@ -73,31 +72,39 @@ macro_rules! launch_component {
     };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum AppPage {
     Home,
+    System,
+    Battery,
     Display,
     Keyboard,
-    Aura,
-    Animatrix,
     Touchpad,
+    Lighting,
     Audio,
-    System,
+    Animatrix,
+    Appearance,
+    About,
+    Hardware,
     Search,
 }
 
 impl AppPage {
     fn as_str(self) -> &'static str {
         match self {
-            AppPage::Home => "home",
-            AppPage::Display => "display",
-            AppPage::Keyboard => "keyboard",
-            AppPage::Aura => "aura",
-            AppPage::Animatrix => "animatrix",
-            AppPage::Touchpad => "touchpad",
-            AppPage::Audio => "audio",
-            AppPage::System => "system",
-            AppPage::Search => "search",
+            AppPage::Home       => "home",
+            AppPage::System     => "system",
+            AppPage::Battery    => "battery",
+            AppPage::Display    => "display",
+            AppPage::Keyboard   => "keyboard",
+            AppPage::Touchpad   => "touchpad",
+            AppPage::Lighting   => "lighting",
+            AppPage::Audio      => "audio",
+            AppPage::Animatrix  => "animatrix",
+            AppPage::Appearance => "appearance",
+            AppPage::About      => "about",
+            AppPage::Hardware   => "hardware",
+            AppPage::Search     => "search",
         }
     }
 }
@@ -543,11 +550,22 @@ impl SimpleComponent for AppModel {
         content_stack.add_named(&home_scroll, Some(AppPage::Home.as_str()));
         content_stack.add_named(&display_page, Some(AppPage::Display.as_str()));
         content_stack.add_named(&keyboard_page, Some(AppPage::Keyboard.as_str()));
-        content_stack.add_named(&aura_page, Some(AppPage::Aura.as_str()));
+        content_stack.add_named(&aura_page, Some(AppPage::Lighting.as_str()));
         content_stack.add_named(&animatrix_page, Some(AppPage::Animatrix.as_str()));
         content_stack.add_named(&touchpad_page, Some(AppPage::Touchpad.as_str()));
         content_stack.add_named(&audio_page, Some(AppPage::Audio.as_str()));
         content_stack.add_named(&system_page, Some(AppPage::System.as_str()));
+
+        // Placeholder pages for new nav items (Phase 4 — content added per-task)
+        let battery_placeholder = adw::PreferencesPage::new();
+        content_stack.add_named(&battery_placeholder, Some(AppPage::Battery.as_str()));
+        let appearance_placeholder = adw::PreferencesPage::new();
+        content_stack.add_named(&appearance_placeholder, Some(AppPage::Appearance.as_str()));
+        let about_placeholder = adw::PreferencesPage::new();
+        content_stack.add_named(&about_placeholder, Some(AppPage::About.as_str()));
+        let hardware_placeholder = adw::PreferencesPage::new();
+        content_stack.add_named(&hardware_placeholder, Some(AppPage::Hardware.as_str()));
+
         content_stack.set_visible_child_name(AppPage::Home.as_str());
 
         let content_header = adw::HeaderBar::new();
@@ -562,21 +580,29 @@ impl SimpleComponent for AppModel {
         sidebar_list.add_css_class("navigation-sidebar");
         sidebar_list.set_selection_mode(gtk4::SelectionMode::Single);
 
-        let sorted_nav = Rc::new(sorted_nav_items());
+        let nav = nav_items();
 
+        // Group label injected as row header at these indices:
+        // 1=CONTROL, 3=DISPLAY & INPUT, 6=FEATURES, 9=SETTINGS
         sidebar_list.set_header_func(|row, _before| {
-            if row.index() == 1 {
-                let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-                sep.set_margin_top(4);
-                sep.set_margin_bottom(4);
-                sep.add_css_class("nav-separator");
-                row.set_header(Some(&sep));
+            let label_key = match row.index() {
+                1 => Some(t!("nav_group_control")),
+                3 => Some(t!("nav_group_display_input")),
+                6 => Some(t!("nav_group_features")),
+                9 => Some(t!("nav_group_settings")),
+                _ => None,
+            };
+            if let Some(text) = label_key {
+                let lbl = gtk4::Label::new(Some(text.as_ref()));
+                lbl.set_halign(gtk4::Align::Start);
+                lbl.add_css_class("nav-group-label");
+                row.set_header(Some(&lbl));
             } else {
                 row.set_header(None::<&gtk4::Widget>);
             }
         });
 
-        for (icon_name, title_key, _page_name) in sorted_nav.iter() {
+        for (icon_name, title_key, _page_name) in nav.iter() {
             let row = gtk4::ListBoxRow::new();
             let hbox = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
             hbox.set_margin_top(10);
@@ -595,11 +621,10 @@ impl SimpleComponent for AppModel {
 
         let stack_c = content_stack.clone();
         let nav_page_c = content_nav_page.clone();
-        let sorted_nav_c = sorted_nav.clone();
         sidebar_list.connect_row_selected(move |_, row| {
             if let Some(row) = row {
                 let idx = row.index() as usize;
-                if let Some(&(_, title_key, page_name)) = sorted_nav_c.get(idx) {
+                if let Some(&(_, title_key, page_name)) = nav.get(idx) {
                     stack_c.set_visible_child_name(page_name);
                     nav_page_c.set_title(&t!(title_key));
                 }
@@ -613,7 +638,7 @@ impl SimpleComponent for AppModel {
         // Search
 
         let search_widgets = crate::search::setup(
-            (*sorted_nav).clone(),
+            nav_items().to_vec(),
             &content_stack,
             &content_nav_page,
             &sidebar_list,
