@@ -1,0 +1,32 @@
+app-id: io.github.baraka_malila.utu
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: utu
+
+finish-args:
+  - --system-talk-name=xyz.ljones.*
+  - --system-talk-name=org.supergfxctl.*
+  - --device=all
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/utu/cargo-home
+
+modules:
+  - name: utu
+    buildsystem: simple
+    build-commands:
+      - cargo build --release --offline
+      - install -Dm755 target/release/utu /app/bin/utu
+      - install -Dm644 packaging/io.github.baraka_malila.utu.desktop /app/share/applications/io.github.baraka_malila.utu.desktop
+      - install -Dm644 packaging/io.github.baraka_malila.utu.metainfo.xml /app/share/metainfo/io.github.baraka_malila.utu.metainfo.xml
+    sources:
+      - type: dir
+        path: ..

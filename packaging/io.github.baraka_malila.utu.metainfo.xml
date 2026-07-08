@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.baraka_malila.utu</id>
+  <name>utu</name>
+  <summary>ASUS laptop control centre for Linux</summary>
+  <description>
+    <p>utu gives ASUS laptop users on Ubuntu and other Linux distributions
+    control over thermal profiles, GPU mode, RGB lighting, battery health,
+    fan settings, and more — without manual sysfs writes.</p>
+    <p>Requires asusd (asusctl) and supergfxctl daemons.</p>
+  </description>
+  <url type="homepage">https://github.com/Baraka-Malila/utu</url>
+  <url type="bugtracker">https://github.com/Baraka-Malila/utu/issues</url>
+  <launchable type="desktop-id">io.github.baraka_malila.utu.desktop</launchable>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.baraka_malila">
+    <name>Baraka Malila</name>
+  </developer>
+  <releases>
+    <release version="0.1.5" date="2026-07-08"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+</component>
