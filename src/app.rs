@@ -124,6 +124,7 @@ pub enum AppMsg {
     SetLanguage(String),
     ToggleAutostart(bool),
     ActivateProfile(String),
+    NavigateToHardware,
     LegacyMigrationAccepted,
     LegacyMigrationDeclined,
     TriggerManualMigration,
@@ -135,6 +136,7 @@ pub struct AppModel {
     start_hidden: bool,
     window: gtk4::glib::WeakRef<adw::ApplicationWindow>,
     toast_overlay: adw::ToastOverlay,
+    sidebar_list: gtk4::ListBox,
     _tray: ksni::Handle<tray::UtuTray>,
     home: Controller<HomeModel>,
     apu_mem: Controller<ApuMemModel>,
@@ -280,6 +282,16 @@ impl SimpleComponent for AppModel {
                 let config = crate::services::config::AppConfig::load();
                 self.distribute_profile(config.active_profile());
             }
+            AppMsg::NavigateToHardware => {
+                let nav = nav_items();
+                if let Some(idx) =
+                    nav.iter().position(|(_, _, page)| *page == AppPage::Hardware.as_str())
+                {
+                    if let Some(row) = self.sidebar_list.row_at_index(idx as i32) {
+                        self.sidebar_list.select_row(Some(&row));
+                    }
+                }
+            }
             AppMsg::LegacyMigrationAccepted => {
                 match crate::services::migration::perform_migration() {
                     Ok(()) => {}
@@ -335,7 +347,7 @@ impl SimpleComponent for AppModel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 HomeOutput::Error(e) => AppMsg::Error(e),
-                HomeOutput::ActivateProfile(id) => AppMsg::ActivateProfile(id),
+                HomeOutput::NavigateToHardware => AppMsg::NavigateToHardware,
             });
         let apu_mem = launch_component!(ApuMemModel, sender);
         let battery = launch_component!(BatteryModel, sender);
@@ -417,11 +429,13 @@ impl SimpleComponent for AppModel {
         });
 
         let toast_overlay = adw::ToastOverlay::new();
+        let sidebar_list_early = gtk4::ListBox::new();
 
         let model = AppModel {
             start_hidden: init,
             window: root.downgrade(),
             toast_overlay,
+            sidebar_list: sidebar_list_early.clone(),
             _tray: tray_handle,
             home,
             apu_mem,
@@ -623,7 +637,7 @@ impl SimpleComponent for AppModel {
 
         // Sidebar
 
-        let sidebar_list = gtk4::ListBox::new();
+        let sidebar_list = sidebar_list_early;
         sidebar_list.add_css_class("navigation-sidebar");
         sidebar_list.set_selection_mode(gtk4::SelectionMode::Single);
 
